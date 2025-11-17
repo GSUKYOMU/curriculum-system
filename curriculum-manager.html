@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>입학자 교육과정 관리 시스템</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React / ReactDOM / Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- SheetJS -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // 아이콘들 (SVG)
+    const Upload = () => (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+        />
+      </svg>
+    );
+
+    const BookOpen = () => (
+      <svg className="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+        />
+      </svg>
+    );
+
+    const Filter = () => (
+      <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+        />
+      </svg>
+    );
+
+    const Calendar = () => (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+        />
+      </svg>
+    );
+
+    function CurriculumManager() {
+      const [departments, setDepartments] = useState([]);
+      const [curricula, setCurricula] = useState([]);
+      const [selectedDept, setSelectedDept] = useState('');
+      const [selectedEntryYear, setSelectedEntryYear] = useState('');
+      const [selectedViewYear, setSelectedViewYear] = useState('');
+      const [filteredCourses, setFilteredCourses] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [uploadType, setUploadType] = useState('full');
+
+      // 초기 로드
+      useEffect(() => {
+        loadData();
+      }, []);
+
+      // 필터 변경 시 과목 필터링
+      useEffect(() => {
+        filterCourses();
+      }, [selectedDept, selectedEntryYear, selectedViewYear, curricula]);
+
+      const loadData = () => {
+        try {
+          const currData = localStorage.getItem('curricula');
+          const deptData = localStorage.getItem('departments');
+
+          if (currData) setCurricula(JSON.parse(currData));
+          if (deptData) setDepartments(JSON.parse(deptData));
+        } catch (error) {
+          console.log('초기 데이터 없음');
+        }
+        setLoading(false);
+      };
+
+      const saveData = (newCurricula, newDepartments) => {
+        try {
+          localStorage.setItem('curricula', JSON.stringify(newCurricula));
+          localStorage.setItem('departments', JSON.stringify(newDepartments));
+        } catch (error) {
+          console.error('저장 실패:', error);
+          alert('저장 실패: ' + error.message);
+        }
+      };
+
+      // 엑셀 업로드
+      const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) {
+          console.log('파일이 선택되지 않았습니다.');
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onerror = (error) => {
+          console.error('파일 읽기 에러:', error);
+          alert('파일을 읽을 수 없습니다.');
+        };
+
+        reader.onload = (evt) => {
+          try {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+
+            const sheetName = workbook.SheetNames[0];
+            const sheet = workbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(sheet);
+
+            if (uploadType === 'full') {
+              processExcelData(jsonData);
+            } else {
+              processChangeData(jsonData);
+            }
+          } catch (error) {
+            console.error('엑셀 처리 에러:', error);
+            alert('엑셀 파일 읽기 실패: ' + error.message);
+          }
+        };
+
+        reader.readAsArrayBuffer(file);
+        e.target.value = '';
+      };
+
+      // 전체 교육과정 업로드
+      const processExcelData = (data) => {
+        if (data.length === 0) {
+          alert('데이터가 비어있습니다.');
+          return;
+        }
+
+        const dept = prompt('학과명을 입력하세요:');
+        if (!dept) {
+          alert('학과명은 필수입니다.');
+          return;
+        }
+
+        const entryYear = prompt('입학년도를 입력하세요 (예: 2024):');
+        if (!entryYear) {
+          alert('입학년도는 필수입니다.');
+          return;
+        }
+
+        const version = prompt('버전명을 입력하세요 (예: 초기, 2024-2학기 개정):') || '초기';
+
+        const courses = [];
+
+        data.forEach((row) => {
+          const grade = row['학년'];
+          const courseName = row['교과목명'];
+
+          if (!courseName || !grade) {
+            return;
+          }
+
+          const category = row['구분'] || '';
+          const categoryDetail = row['법정내역'] || '';
+          const division = row['수준'] || '';
+          const divisionDetail = row['이수구분'] || '';
+
+          const credits = parseInt(row['학점'] || 0);
+          const theory = parseInt(row['시수'] || 0);
+          const practice = parseInt(row['이론시수'] || 0);
+          const lab = parseInt(row['실습시수'] || 0);
+
+          if (row['1학기'] && parseInt(row['1학기']) > 0) {
+            courses.push({
+              courseCode: '',
+              courseName: courseName,
+              credits: credits,
+              theory: theory,
+              practice: practice,
+              lab: lab,
+              targetGrade: grade,
+              semester: 1,
+              category: category,
+              categoryDetail: categoryDetail,
+              division: division,
+              divisionDetail: divisionDetail,
+              capacity: parseInt(row['1학기'] || 0),
+            });
+          }
+
+          if (row['2학기'] && parseInt(row['2학기']) > 0) {
+            courses.push({
+              courseCode: '',
+              courseName: courseName,
+              credits: credits,
+              theory: theory,
+              practice: practice,
+              lab: lab,
+              targetGrade: grade,
+              semester: 2,
+              category: category,
+              categoryDetail: categoryDetail,
+              division: division,
+              divisionDetail: divisionDetail,
+              capacity: parseInt(row['2학기'] || 0),
+            });
+          }
+
+          // 카테고리별 정원 (필요 없으면 나중에 제거 가능)
+          const categories = [
+            '1.1 선택이향', '1.2 인문과학', '1.3 신학적상',
+            '2.1 기독교사', '2.2 기독교이론', '2.3 기독론',
+            '3.1 철교적상', '3.2 리더십', '3.3 목회실습'
+          ];
+
+          categories.forEach((cat) => {
+            if (row[cat] && parseInt(row[cat]) > 0) {
+              courses.push({
+                courseCode: '',
+                courseName: courseName,
+                credits: credits,
+                theory: theory,
+                practice: practice,
+                lab: lab,
+                targetGrade: grade,
+                semester: 0,
+                category: category,
+                categoryDetail: categoryDetail,
+                division: division,
+                divisionDetail: divisionDetail,
+                capacityCategory: cat,
+                capacity: parseInt(row[cat] || 0),
+              });
+            }
+          });
+        });
+
+        if (courses.length === 0) {
+          alert(
+            '처리된 과목이 없습니다. 엑셀 파일 형식을 확인해주세요.\n\n필요한 열: 학년, 교과목명, 학점, 시수, 1학기, 2학기 등'
+          );
+          return;
+        }
+
+        const newCurriculum = {
+          id: Date.now().toString(),
+          department: dept,
+          entryYear: entryYear,
+          version: version,
+          uploadDate: new Date().toISOString(),
+          courses: courses,
+        };
+
+        const updatedCurricula = [...curricula, newCurriculum];
+        const updatedDepartments = [...new Set([...departments, dept])];
+
+        setCurricula(updatedCurricula);
+        setDepartments(updatedDepartments);
+        saveData(updatedCurricula, updatedDepartments);
+
+        alert(
+          `업로드 완료!\n- 학과: ${dept}\n- 입학년도: ${entryYear}\n- 처리된 데이터: ${courses.length}개`
+        );
+      };
+
+      // 변경사항 업로드
+      const processChangeData = (data) => {
+        if (data.length === 0) {
+          alert('데이터가 비어있습니다.');
+          return;
+        }
+
+        const dept = prompt('학과명을 입력하세요:');
+        const entryYear = prompt('입학년도를 입력하세요 (예: 2023):');
+        const changeYear = prompt('변경 시행 학년도를 입력하세요 (예: 2023):');
+        const version =
+          prompt('버전명을 입력하세요 (예: 2023-2학기 변경):') || `${changeYear} 변경`;
+
+        if (!dept || !entryYear || !changeYear) {
+          alert('모든 정보를 입력해주세요.');
+          return;
+        }
+
+        const existingCurricula = curricula.filter(
+          (c) => c.department === dept && c.entryYear === entryYear
+        );
+
+        if (existingCurricula.length === 0) {
+          alert(
+            '해당 학과의 기존 교육과정이 없습니다. 먼저 전체 교육과정을 업로드해주세요.'
+          );
+          return;
+        }
+
+        const baseCurriculum = existingCurricula[existingCurricula.length - 1];
+        let updatedCourses = [...baseCurriculum.courses];
+
+        data.forEach((row) => {
+          const changeType = row['교육과정'];
+          const beforeCourseName = row['교과목명'] || row['기존 교과목명'];
+          const afterCourseName = row['변경 교과목명'] || row['교과목명'];
+
+          if (changeType && changeType.includes('폐지')) {
+            updatedCourses = updatedCourses.filter(
+              (c) => c.courseName !== beforeCourseName
+            );
+          } else if (changeType && changeType.includes('변경')) {
+            updatedCourses = updatedCourses.map((course) => {
+              if (course.courseName === beforeCourseName) {
+                return {
+                  ...course,
+                  courseName: afterCourseName || course.courseName,
+                  credits: parseInt(row['학점'] || course.credits),
+                  theory: parseInt(row['시수'] || course.theory),
+                  practice: parseInt(row['이론시수'] || course.practice),
+                  lab: parseInt(row['실습시수'] || course.lab),
+                  category: row['구분'] || course.category,
+                  divisionDetail: row['이수구분'] || course.divisionDetail,
+                };
+              }
+              return course;
+            });
+          } else if (
+            changeType &&
+            (changeType.includes('신설') || changeType.includes('추가'))
+          ) {
+            const newCourse = {
+              courseCode: '',
+              courseName: afterCourseName || beforeCourseName,
+              credits: parseInt(row['학점'] || 0),
+              theory: parseInt(row['시수'] || 0),
+              practice: parseInt(row['이론시수'] || 0),
+              lab: parseInt(row['실습시수'] || 0),
+              targetGrade: parseInt(row['학년'] || 0),
+              semester: parseInt(row['학기'] || 0),
+              category: row['구분'] || '',
+              categoryDetail: row['법정내역'] || '',
+              division: row['수준'] || '',
+              divisionDetail: row['이수구분'] || '',
+              capacity: parseInt(row['정원'] || 0),
+            };
+            updatedCourses.push(newCourse);
+          }
+        });
+
+        const newCurriculum = {
+          id: Date.now().toString(),
+          department: dept,
+          entryYear: entryYear,
+          version: version,
+          changeYear: changeYear,
+          uploadDate: new Date().toISOString(),
+          isChange: true,
+          courses: updatedCourses,
+        };
+
+        const updatedCurricula = [...curricula, newCurriculum];
+        setCurricula(updatedCurricula);
+        saveData(updatedCurricula, departments);
+
+        alert(`변경사항 반영 완료! (${version})`);
+      };
+
+      // 교육과정 필터링 (학과 + 입학년도 + 조회년도 기준)
+      const filterCourses = () => {
+        if (!selectedDept || !selectedEntryYear || !selectedViewYear) {
+          setFilteredCourses([]);
+          return;
+        }
+
+        const relevantCurricula = curricula.filter(
+          (c) => c.department === selectedDept && c.entryYear === selectedEntryYear
+        );
+
+        if (relevantCurricula.length === 0) {
+          setFilteredCourses([]);
+          return;
+        }
+
+        // 현재는 "마지막 버전" 기준으로 조회
+        const latestCurriculum = relevantCurricula[relevantCurricula.length - 1];
+
+        const yearsSinceEntry =
+          parseInt(selectedViewYear) - parseInt(selectedEntryYear);
+        const currentGrade = yearsSinceEntry + 1;
+
+        const courses = latestCurriculum.courses.filter(
+          (course) => parseInt(course.targetGrade) === currentGrade
+        );
+
+        setFilteredCourses(courses);
+      };
+
+      const getEntryYears = () => {
+        if (!selectedDept) return [];
+        return [...new Set(
+          curricula
+            .filter((c) => c.department === selectedDept)
+            .map((c) => c.entryYear)
+        )].sort();
+      };
+
+      const getCurrentYearRange = () => {
+        const currentYear = new Date().getFullYear();
+        return Array.from({ length: 10 }, (_, i) => currentYear - 5 + i);
+      };
+
+      const resetData = () => {
+        if (confirm('모든 데이터를 삭제하시겠습니까?')) {
+          try {
+            localStorage.removeItem('curricula');
+            localStorage.removeItem('departments');
+            setCurricula([]);
+            setDepartments([]);
+            setSelectedDept('');
+            setSelectedEntryYear('');
+            setSelectedViewYear('');
+            setFilteredCourses([]);
+            alert('데이터가 초기화되었습니다.');
+          } catch (error) {
+            console.error('초기화 실패:', error);
+          }
+        }
+      };
+
+      const getSummaryInfo = () => {
+        const deptCount = departments.length;
+        const curriculumCount = curricula.length;
+        let lastDate = '-';
+
+        if (curricula.length > 0) {
+          const sorted = [...curricula].sort(
+            (a, b) => new Date(b.uploadDate) - new Date(a.uploadDate)
+          );
+          lastDate = new Date(sorted[0].uploadDate).toLocaleDateString('ko-KR');
+        }
+
+        return { deptCount, curriculumCount, lastDate };
+      };
+
+      if (loading) {
+        return (
+          <div className="flex items-center justify-center h-screen">
+            <div className="text-gray-700 text-lg">로딩 중...</div>
+          </div>
+        );
+      }
+
+      const { deptCount, curriculumCount, lastDate } = getSummaryInfo();
+
+      return (
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {/* 헤더 */}
+          <div className="bg-white rounded-2xl shadow-xl p-6 mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <BookOpen />
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
+                  입학자 교육과정 관리 시스템
+                </h1>
+                <p className="text-sm text-gray-500 mt-1">
+                  학과별·입학년도별 교육과정을 업로드하고, 변경사항을 반영하여 학년·학기별 개설 과목을 조회합니다.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={resetData}
+              className="self-start md:self-auto px-4 py-2 text-sm bg-red-500 text-white rounded-lg hover:bg-red-600 transition"
+            >
+              데이터 초기화
+            </button>
+          </div>
+
+          {/* 요약 카드 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-white rounded-xl shadow p-4">
+              <div className="text-xs text-gray-500 mb-1">등록된 학과 수</div>
+              <div className="text-2xl font-bold text-indigo-600">{deptCount}</div>
+            </div>
+            <div className="bg-white rounded-xl shadow p-4">
+              <div className="text-xs text-gray-500 mb-1">교육과정 버전 수</div>
+              <div className="text-2xl font-bold text-indigo-600">
+                {curriculumCount}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl shadow p-4">
+              <div className="text-xs text-gray-500 mb-1">마지막 업로드 일자</div>
+              <div className="text-lg font-semibold text-gray-800">{lastDate}</div>
+            </div>
+          </div>
+
+          {/* 상단 2단 레이아웃: 업로드 + 등록된 교육과정 목록 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            {/* 엑셀 업로드 */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Upload />
+                <h2 className="text-lg font-semibold text-gray-800">엑셀 파일 업로드</h2>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  업로드 유형
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center cursor-pointer text-sm">
+                    <input
+                      type="radio"
+                      value="full"
+                      checked={uploadType === 'full'}
+                      onChange={(e) => setUploadType(e.target.value)}
+                      className="mr-2"
+                    />
+                    전체 교육과정
+                  </label>
+                  <label className="flex items-center cursor-pointer text-sm">
+                    <input
+                      type="radio"
+                      value="change"
+                      checked={uploadType === 'change'}
+                      onChange={(e) => setUploadType(e.target.value)}
+                      className="mr-2"
+                    />
+                    교육과정 변경사항
+                  </label>
+                </div>
+              </div>
+
+              {uploadType === 'full' ? (
+                <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                  전체 교육과정 엑셀 열 예시: 학년, 구분, 법정내역, 수준, 이수구분, 교과목명, 학점, 시수,
+                  이론시수, 실습시수, 1학기, 2학기, (선택) 1.1~3.3 선택 카테고리
+                </p>
+              ) : (
+                <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                  변경사항 엑셀 열 예시: 교육과정(신설/변경/폐지), 교과목명, 변경 교과목명, 학년, 학기, 학점,
+                  시수, 이론시수, 실습시수, 구분, 법정내역, 수준, 이수구분, 정원 등
+                </p>
+              )}
+
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileUpload}
+                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer"
+              />
+            </div>
+
+            {/* 등록된 교육과정 목록 */}
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                등록된 교육과정 목록
+              </h3>
+              {curricula.length > 0 ? (
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  {curricula
+                    .slice()
+                    .sort(
+                      (a, b) => new Date(b.uploadDate) - new Date(a.uploadDate)
+                    )
+                    .map((curr) => (
+                      <div
+                        key={curr.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="text-sm">
+                          <span className="font-semibold text-gray-800">
+                            {curr.department}
+                          </span>
+                          <span className="mx-1 text-gray-400">|</span>
+                          <span className="text-gray-600">
+                            {curr.entryYear}학번
+                          </span>
+                          <span className="mx-1 text-gray-400">|</span>
+                          <span
+                            className={`text-xs ${
+                              curr.isChange
+                                ? 'text-orange-600 font-semibold'
+                                : 'text-indigo-600'
+                            }`}
+                          >
+                            {curr.version}
+                          </span>
+                          {curr.isChange && curr.changeYear && (
+                            <>
+                              <span className="mx-1 text-gray-400">|</span>
+                              <span className="text-xs text-gray-600">
+                                {curr.changeYear}학년도 시행
+                              </span>
+                            </>
+                          )}
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(curr.uploadDate).toLocaleDateString('ko-KR')}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-sm text-center py-6">
+                  아직 등록된 교육과정이 없습니다. 엑셀 파일을 업로드해 주세요.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 조회 영역 */}
+          <div className="bg-white rounded-2xl shadow-lg p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <Filter />
+              <h2 className="text-xl font-semibold text-gray-800">
+                교육과정 조회
+              </h2>
+            </div>
+
+            {/* 필터 */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  학과
+                </label>
+                <select
+                  value={selectedDept}
+                  onChange={(e) => {
+                    setSelectedDept(e.target.value);
+                    setSelectedEntryYear('');
+                    setSelectedViewYear('');
+                  }}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="">학과 선택</option>
+                  {departments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  입학년도
+                </label>
+                <select
+                  value={selectedEntryYear}
+                  onChange={(e) => setSelectedEntryYear(e.target.value)}
+                  disabled={!selectedDept}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+                >
+                  <option value="">입학년도 선택</option>
+                  {getEntryYears().map((year) => (
+                    <option key={year} value={year}>
+                      {year}학년도
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  조회 학년도
+                </label>
+                <select
+                  value={selectedViewYear}
+                  onChange={(e) => setSelectedViewYear(e.target.value)}
+                  disabled={!selectedEntryYear}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent disabled:bg-gray-100"
+                >
+                  <option value="">조회 학년도 선택</option>
+                  {getCurrentYearRange().map((year) => (
+                    <option key={year} value={year}>
+                      {year}학년도
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* 조회 결과 */}
+            {selectedDept && selectedEntryYear && selectedViewYear && (
+              <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <Calendar />
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    {selectedDept} {selectedEntryYear}학번 · {selectedViewYear}학년도{' '}
+                    {parseInt(selectedViewYear) - parseInt(selectedEntryYear) + 1}
+                    학년 개설 과목
+                  </h3>
+                </div>
+
+                {filteredCourses.length > 0 ? (
+                  <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
+                    <table className="w-full text-xs md:text-sm">
+                      <thead className="bg-indigo-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-gray-700">
+                            교과목명
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            학점
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            시수
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            이론
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            실습
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            학기
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            구분
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            이수구분
+                          </th>
+                          <th className="px-3 py-2 text-center font-semibold text-gray-700">
+                            정원
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {filteredCourses.map((course, idx) => (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 text-gray-800 whitespace-nowrap">
+                              {course.courseName}
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-600">
+                              {course.credits}
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-600">
+                              {course.theory}
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-600">
+                              {course.practice}
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-600">
+                              {course.lab}
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-600">
+                              {course.semester === 0
+                                ? '-'
+                                : `${course.semester}학기`}
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <span className="px-2 py-1 rounded-full text-[10px] md:text-xs bg-blue-100 text-blue-700">
+                                {course.category}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-center text-[10px] md:text-xs text-gray-600">
+                              {course.divisionDetail || course.division}
+                            </td>
+                            <td className="px-3 py-2 text-center text-gray-600">
+                              {course.capacity}
+                              {course.capacityCategory && (
+                                <div className="text-[10px] text-gray-400">
+                                  {course.capacityCategory}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm text-center py-6">
+                    해당 조건의 개설 과목이 없습니다.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!selectedDept && (
+              <p className="text-xs text-gray-500 mt-4">
+                ※ 학과와 입학년도, 조회 학년도를 선택하면 해당 년도의 학년별 개설 과목이 조회됩니다.
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<CurriculumManager />);
+  </script>
+</body>
+</html>
