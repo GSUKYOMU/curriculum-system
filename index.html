@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>입학자 교육과정 관리 시스템</title>
 
+  <!-- Tailwind -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- SheetJS -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
 
@@ -14,19 +17,17 @@
   <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
     <h1 class="text-3xl font-bold mb-6 text-center">입학자 교육과정 업로드</h1>
 
-    <!-- 템플릿 다운로드 버튼 (A안: 업로드 입력창 위쪽) -->
-    <a 
-      href="./입학자교육과정 업로드 템플릿.xlsx"
-      download
-      class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 inline-block mb-4"
-    >
+    <!-- 템플릿 다운로드 -->
+    <a href="./입학자교육과정%20업로드%20템플릿.xlsx"
+       download="입학자교육과정 업로드 템플릿.xlsx"
+       class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 inline-block mb-4">
       📥 입학자교육과정 업로드 템플릿 다운로드
     </a>
 
-    <!-- 파일 업로드 -->
-    <div class="mb-6">
-      <input id="fileInput" type="file" accept=".xlsx,.xls" class="border p-3 rounded w-full"/>
-    </div>
+    <!-- 업로드 -->
+    <input id="fileInput" type="file"
+           accept=".xlsx,.xls"
+           class="border p-3 rounded w-full mb-4"/>
 
     <button onclick="handleUpload()"
             class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
@@ -39,8 +40,11 @@
     <ul id="deptList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></ul>
   </div>
 
+
 <script>
-// 상위 학과 목록 (표시 순서 고정)
+/* ---------------------------
+   설정값
+--------------------------- */
 const TOP_DEPTS = [
   "신학과",
   "사회복지학과",
@@ -52,53 +56,43 @@ const TOP_DEPTS = [
   "외국인전담학과"
 ];
 
-// LocalStorage 키
 const STORAGE_KEY = "curriculumData";
 
-// -----------------------------
-// 데이터 불러오기
-// -----------------------------
-function getData() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-  } catch (e) {
-    console.error(e);
-    return [];
-  }
+/* ---------------------------
+   저장소 관련 함수
+--------------------------- */
+function getData(){
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch(e){ return []; }
 }
 
-// -----------------------------
-// 데이터 저장
-// -----------------------------
-function saveData(data) {
+function saveData(data){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
-// -----------------------------
-// 엑셀 업로드 처리
-// -----------------------------
-function handleUpload() {
+/* ---------------------------
+   업로드 처리
+--------------------------- */
+function handleUpload(){
   const file = document.getElementById("fileInput").files[0];
-  if (!file) {
+  if(!file){
     alert("엑셀 파일을 업로드해주세요!");
     return;
   }
 
   const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: "binary" });
 
-  reader.onload = function (e) {
-    const workbook = XLSX.read(e.target.result, { type: "binary" });
-
-    // 시트명은 "교육과정"
-    const sheet = workbook.Sheets["교육과정"];
-    if (!sheet) {
-      alert("엑셀 시트 이름이 '교육과정'인지 확인해주세요.");
+    const sh = wb.Sheets["교육과정"];
+    if(!sh){
+      alert("시트 이름이 '교육과정'인지 확인해주세요.");
       return;
     }
 
-    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
 
-    // 메타데이터 추출
+    /* -------- 메타데이터 -------- */
     const meta = {
       dept: (rows[0][1] || "").toString().trim(),
       year: (rows[1][1] || "").toString().trim(),
@@ -108,44 +102,50 @@ function handleUpload() {
       meetingDate: (rows[5][1] || "").toString().trim()
     };
 
-    if (!meta.dept || !meta.year || !meta.docNum) {
-      alert("학과명, 입학년도, 문서번호는 반드시 입력되어야 합니다.");
+    // ⭐ 숫자로 들어온 입학년도 자동 변환
+    meta.year = String(meta.year).trim();
+
+    if(!meta.dept || !meta.year || !meta.docNum){
+      alert("학과명, 입학년도, 문서번호는 반드시 입력해야 합니다.");
       return;
     }
 
-    // 교육과정 테이블 시작 위치 찾기
-    let startRow = -1;
-    for (let i = 0; i < rows.length; i++) {
-      if (rows[i][0] === "개설학년") {
-        startRow = i;
+    /* -------- 교육과정 표 범위 찾기 -------- */
+    let start = -1;
+    for(let i=0; i<rows.length; i++){
+      if(rows[i][0] === "개설학년"){
+        start = i;
         break;
       }
     }
-    if (startRow === -1) {
-      alert("교육과정 표의 헤더가 있는지 확인해주세요.");
+
+    if(start === -1){
+      alert("표 헤더(개설학년)가 없습니다.");
       return;
     }
 
-    const headers = rows[startRow];
-    const dataRows = rows.slice(startRow + 1).filter(r => r.some(cell => cell !== undefined && cell !== null && cell !== ""));
+    const headers = rows[start];
+    const dataRows = rows
+      .slice(start + 1)
+      .filter(r => r.some(c => c !== undefined && c !== null && c !== ""));
 
-    const curriculum = dataRows.map(row => {
+    const curriculum = dataRows.map(r => {
       const obj = {};
-      headers.forEach((h, i) => { obj[h] = row[i] ?? ""; });
+      headers.forEach((h, i) => obj[h] = r[i] ?? "");
       return obj;
     });
 
-    let allData = getData();
-
-    // 이전 문서 찾기
+    /* -------- 변경내역 비교 -------- */
+    let all = getData();
     let prev = null;
-    if (meta.revDocNum) {
-      prev = allData.find(d => d.dept === meta.dept && d.docNum === meta.revDocNum);
+
+    if(meta.revDocNum){
+      prev = all.find(d => d.dept === meta.dept && d.docNum === meta.revDocNum);
     }
 
-    // 변경 비교
-    const changes = prev ? compareChanges(prev.data, curriculum) : null;
+    const changes = prev ? compare(prev.data, curriculum) : null;
 
+    /* -------- 저장 -------- */
     const entry = {
       ...meta,
       data: curriculum,
@@ -153,75 +153,77 @@ function handleUpload() {
       uploadDate: new Date().toISOString()
     };
 
-    allData = allData.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
-    allData.push(entry);
-    saveData(allData);
+    // 동일 문서번호 삭제 후 새 버전 삽입
+    all = all.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
+    all.push(entry);
 
-    alert("업로드가 완료되었습니다!");
+    saveData(all);
+
+    alert("업로드 완료!");
     renderDeptList();
   };
 
   reader.readAsBinaryString(file);
 }
 
-// -----------------------------
-// 변경 비교 로직
-// -----------------------------
-function compareChanges(prevData, newData) {
+/* ---------------------------
+   변경내역 비교 함수
+--------------------------- */
+function compare(prev, next){
   const changes = [];
-  const prevMap = {};
-  const newMap = {};
+  const prevMap = {}, nextMap = {};
 
-  prevData.forEach(item => { if (item?.["교과목명"]) prevMap[item["교과목명"]] = item; });
-  newData.forEach(item => { if (item?.["교과목명"]) newMap[item["교과목명"]] = item; });
+  prev.forEach(i => { if(i["교과목명"]) prevMap[i["교과목명"]] = i; });
+  next.forEach(i => { if(i["교과목명"]) nextMap[i["교과목명"]] = i; });
 
-  Object.keys(newMap).forEach(name => {
-    const newItem = newMap[name];
-    const oldItem = prevMap[name];
-    if (!oldItem) {
-      changes.push({ type: "추가됨", subject: name, before: null, after: newItem });
+  Object.keys(nextMap).forEach(subj => {
+    if(!prevMap[subj]){
+      changes.push({ type:"추가됨", subject: subj, after: nextMap[subj] });
     } else {
       const diff = {};
-      Object.keys(newItem).forEach(key => {
-        if ((newItem[key] ?? "") !== (oldItem[key] ?? "")) {
-          diff[key] = { before: oldItem[key] ?? "", after: newItem[key] ?? "" };
+      const a = nextMap[subj];
+      const b = prevMap[subj];
+      Object.keys(a).forEach(k => {
+        if((a[k] || "") !== (b[k] || "")){
+          diff[k] = { before: b[k] || "", after: a[k] || "" };
         }
       });
-      if (Object.keys(diff).length > 0) {
-        changes.push({ type: "변경됨", subject: name, detail: diff });
-      }
+      if(Object.keys(diff).length > 0)
+        changes.push({ type:"변경됨", subject: subj, detail: diff });
     }
   });
 
-  Object.keys(prevMap).forEach(name => {
-    if (!newMap[name]) {
-      changes.push({ type: "삭제됨", subject: name, before: prevMap[name], after: null });
+  Object.keys(prevMap).forEach(subj => {
+    if(!nextMap[subj]){
+      changes.push({ type:"삭제됨", subject: subj, before: prevMap[subj] });
     }
   });
 
   return changes;
 }
 
-// -----------------------------
-// 학과 목록 렌더링
-// -----------------------------
-function renderDeptList() {
-  const list = document.getElementById("deptList");
-  list.innerHTML = "";
+/* ---------------------------
+   학과 리스트 렌더링
+--------------------------- */
+function renderDeptList(){
+  const ul = document.getElementById("deptList");
+  ul.innerHTML = "";
 
-  TOP_DEPTS.forEach(dept => {
-    list.innerHTML += `
+  TOP_DEPTS.forEach(d => {
+    ul.innerHTML += `
       <li class="border rounded-lg px-4 py-3 hover:bg-gray-50">
-        <a href="./dept/${dept}.html" class="flex items-center justify-between">
-          <span class="font-semibold">${dept}</span>
-          <span class="text-sm text-blue-600">보기</span>
+        <a href="./dept/${d}.html" class="flex justify-between">
+          <span class="font-semibold">${d}</span>
+          <span class="text-blue-600 text-sm">보기</span>
         </a>
       </li>
     `;
   });
 }
 
+/* 초기 실행 */
 renderDeptList();
+
 </script>
 
 </body>
