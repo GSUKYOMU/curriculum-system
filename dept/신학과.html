@@ -6,9 +6,17 @@
   <title>신학과 입학자 교육과정 (조회 전용)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-  <style>.strike-delete{ text-decoration:line-through;color:#d00000;font-weight:bold; }</style>
+  <style>
+    .strike-delete {
+      text-decoration: line-through;
+      color: #d00000;
+      font-weight: bold;
+    }
+  </style>
 </head>
+
 <body class="bg-gray-100 min-h-screen">
+
 <div class="max-w-6xl mx-auto py-8 px-4">
   <a href="../index.html" class="text-blue-600 text-sm">← 메인으로</a>
   <h1 class="text-3xl font-bold mt-2 mb-4">신학과 입학자 교육과정 (조회 전용)</h1>
@@ -38,16 +46,16 @@
       <table class="min-w-full text-sm border">
         <thead class="bg-gray-100">
           <tr>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(0)">개설학년</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(1)">개설학기</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(2)">교과목명</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(3)">학점</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(4)">총시수</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(5)">이론</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(6)">실습</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(7)">실험</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(8)">실기</th>
-            <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(9)">비고</th>
+            <th class="border px-2 py-1">개설학년</th>
+            <th class="border px-2 py-1">개설학기</th>
+            <th class="border px-2 py-1">교과목명</th>
+            <th class="border px-2 py-1">학점</th>
+            <th class="border px-2 py-1">총시수</th>
+            <th class="border px-2 py-1">이론</th>
+            <th class="border px-2 py-1">실습</th>
+            <th class="border px-2 py-1">실험</th>
+            <th class="border px-2 py-1">실기</th>
+            <th class="border px-2 py-1">비고</th>
           </tr>
         </thead>
         <tbody id="curriculumBody"></tbody>
@@ -56,6 +64,7 @@
   </div>
 </div>
 
+<!-- 변경 패널 -->
 <div id="overlay" class="fixed inset-0 bg-black bg-opacity-30 hidden"></div>
 <div id="changePanel" class="fixed top-0 right-0 h-full w-full md:w-1/3 bg-white shadow-xl transform translate-x-full transition-transform duration-200">
   <div class="p-4 border-b flex items-center justify-between">
@@ -66,66 +75,120 @@
 </div>
 
 <script>
+/* ============================
+   공통 유틸
+============================ */
 const STORAGE_KEY = "curriculumData";
 const TRACKS = ["신학과"];
 let selectedTrack = TRACKS[0];
 let selectedYear = null;
 let currentEntries = [];
 let currentEntry = null;
-let sortState = {};
 
-function clean(v){ return (v||"").toString().normalize("NFKC").replace(/\s+/g," ").trim(); }
-function same(a,b){ return clean(a)===clean(b); }
-function getData(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");}catch(e){return [];} }
+function clean(v) {
+  return (v || "").toString().normalize("NFKC").replace(/\s+/g, " ").trim();
+}
+function same(a, b) {
+  return clean(a) === clean(b);
+}
+function getData() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch (e) { return []; }
+}
 
-function initTrackButtons(){
+/* ============================
+   과정 버튼
+============================ */
+function initTrackButtons() {
   const c = document.getElementById("trackButtons");
   c.innerHTML = "";
-  TRACKS.forEach(t=>{
-    let btn=document.createElement("button");
-    btn.textContent=t;
-    btn.className="px-3 py-1 rounded-full border text-sm "+(t===selectedTrack?"bg-blue-600 text-white":"bg-white text-gray-700");
-    btn.onclick=()=>{ selectedTrack=t; selectedYear=null; loadEntries(); initTrackButtons(); };
+  TRACKS.forEach(t => {
+    let btn = document.createElement("button");
+    btn.textContent = t;
+    btn.className =
+      "px-3 py-1 rounded-full border text-sm " +
+      (t === selectedTrack ? "bg-blue-600 text-white" : "bg-white text-gray-700");
+    btn.onclick = () => {
+      selectedTrack = t;
+      selectedYear = null;
+      loadEntries();
+      initTrackButtons();
+    };
     c.appendChild(btn);
   });
 }
 
-function loadEntries(){
-  const all=getData();
-  const filtered=all.filter(d=>d.dept===selectedTrack);
-  const map={};
-  filtered.forEach(e=>{ if(!map[e.year]||map[e.year].uploadDate < e.uploadDate) map[e.year]=e; });
-  currentEntries = Object.values(map).sort((a,b)=>a.year.localeCompare(b.year));
+/* ============================
+   학과 데이터 불러오기
+============================ */
+function loadEntries() {
+  const all = getData();
+  const filtered = all.filter(d => d.dept === selectedTrack);
+
+  const map = {};
+  filtered.forEach(e => {
+    if (!map[e.year] || map[e.year].uploadDate < e.uploadDate) {
+      map[e.year] = e;
+    }
+  });
+
+  currentEntries = Object.values(map).sort((a, b) =>
+    a.year.localeCompare(b.year)
+  );
+
   renderYearButtons();
 }
 
-function renderYearButtons(){
-  const c=document.getElementById("yearButtons");
-  c.innerHTML="";
-  if(!currentEntries.length){ document.getElementById("noData").classList.remove("hidden"); return; }
-  document.getElementById("noData").classList.add("hidden");
-  if(!selectedYear) selectedYear = currentEntries[0].year;
+/* ============================
+   입학년도 버튼
+============================ */
+function renderYearButtons() {
+  const c = document.getElementById("yearButtons");
+  c.innerHTML = "";
 
-  currentEntries.forEach(e=>{
-    let btn=document.createElement("button");
-    btn.textContent=e.year+" 입학자";
-    btn.className="px-3 py-1 rounded-full border text-sm "+(e.year===selectedYear?"bg-indigo-600 text-white":"bg-white text-gray-700");
-    btn.onclick=()=>{ selectedYear=e.year; renderYearButtons(); };
+  if (!currentEntries.length) {
+    document.getElementById("noData").classList.remove("hidden");
+    return;
+  }
+  document.getElementById("noData").classList.add("hidden");
+
+  if (!selectedYear) selectedYear = currentEntries[0].year;
+
+  currentEntries.forEach(e => {
+    let btn = document.createElement("button");
+    btn.textContent = e.year + " 입학자";
+    btn.className =
+      "px-3 py-1 rounded-full border text-sm " +
+      (e.year === selectedYear ? "bg-indigo-600 text-white" : "bg-white text-gray-700");
+    btn.onclick = () => {
+      selectedYear = e.year;
+      renderYearButtons();
+    };
     c.appendChild(btn);
   });
 
   renderCurriculum();
 }
 
-function buildChangeMap(changes){
-  const map={};
-  (changes||[]).forEach(ch=>{
+/* ============================
+   변경내역 매핑
+============================ */
+function buildChangeMap(changes) {
+  const map = {};
+  (changes || []).forEach(ch => {
     [clean(ch.subject), clean(ch.beforeName), clean(ch.afterName)]
-      .filter(k=>k).forEach(k=>{ if(!map[k]) map[k]=[]; map[k].push(ch); });
+      .filter(k => k)
+      .forEach(k => {
+        if (!map[k]) map[k] = [];
+        map[k].push(ch);
+      });
   });
   return map;
 }
 
+/* ============================
+   교육과정 출력 + 삭제과목 표시
+============================ */
 function renderCurriculum() {
   currentEntry = currentEntries.find(e => e.year === selectedYear);
   const tbody = document.getElementById("curriculumBody");
@@ -135,74 +198,54 @@ function renderCurriculum() {
   const changes = currentEntry.changes || [];
   const changeMap = buildChangeMap(changes);
 
-  /* ---------------------------
-      1) 정상 과목 출력
-  --------------------------- */
+  /* 정상 과목 표시 */
   (currentEntry.data || []).forEach(row => {
     let subject = clean(row["교과목명"]);
     let changed = !!changeMap[subject];
-    let isDeleted = row._deleted;
+
     let tr = document.createElement("tr");
 
     const fields = [
-      "개설학년","개설학기","교과목명","학점",
-      "총시수","이론시수","실습시수","실험시수","실기시수","비고"
+      "개설학년", "개설학기", "교과목명", "학점",
+      "총시수", "이론시수", "실습시수", "실험시수", "실기시수", "비고"
     ];
 
-    fields.forEach((key, idx) => {
+    fields.forEach(key => {
       let v = row[key] || "";
       let td = document.createElement("td");
       td.className = "border px-2 py-1 whitespace-nowrap";
 
-      // 교과목명 부분
       if (key === "교과목명") {
-        if (isDeleted) {
-          td.innerHTML = `<span class='strike-delete'>${v} (삭제됨)</span>`;
-        } else if (changed) {
+        if (changed) {
           td.innerHTML = `
             <button class='bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full'
                     onclick='openChangePanel("${subject}")'>
               ${v} 변경내역
-            </button>
-          `;
+            </button>`;
         } else {
-          td.textContent = (v === 0 || v === "0") ? "0" : (v ?? "");
+          td.textContent = v;
         }
       } else {
-        if (isDeleted) td.classList.add("strike-delete");
-        td.textContent = (v === 0 || v === "0") ? "0" : (v ?? "");
+        td.textContent = v;
       }
 
       tr.appendChild(td);
     });
 
-    if (changed && !isDeleted) tr.classList.add("bg-yellow-50");
+    if (changed) tr.classList.add("bg-yellow-50");
     tbody.appendChild(tr);
   });
 
-  /* ---------------------------
-      2) 삭제된 과목 자동 표시
-      (currentEntry.data에는 없지만 변경내역엔 있는 경우)
-  --------------------------- */
-
-  const existingSubjects = new Set(
+  /* 삭제된 과목 자동 표시 */
+  const existing = new Set(
     (currentEntry.data || []).map(r => clean(r["교과목명"]))
   );
 
   (currentEntry.changes || []).forEach(ch => {
-    const names = [
-      clean(ch.subject),
-      clean(ch.beforeName),
-      clean(ch.afterName)
-    ];
-
+    const names = [clean(ch.subject), clean(ch.beforeName), clean(ch.afterName)];
     const subjectName = names.find(n => n) || "";
 
-    // 실제 목록에 없고 변경 유형이 삭제라면 "폐지된 과목"으로 표시
-    if (
-      !existingSubjects.has(subjectName) &&
-      (ch.type === "삭제" || ch.type === "삭제됨")
-    ) {
+    if (!existing.has(subjectName) && (ch.type === "삭제" || ch.type === "삭제됨")) {
       const tr = document.createElement("tr");
       tr.className = "bg-red-50 text-red-700";
 
@@ -211,7 +254,7 @@ function renderCurriculum() {
       td.className = "border px-2 py-1";
 
       td.innerHTML = `
-        ❌ <strong>${subjectName}</strong> — <span class="text-sm">폐지된 과목</span>
+        ❌ <strong>${subjectName}</strong> — 폐지된 과목
         <button class="ml-2 bg-red-100 border border-red-300 text-red-800 text-xs px-2 py-0.5 rounded-full"
           onclick='openChangePanel("${subjectName}")'>
           변경내역 보기
@@ -224,56 +267,75 @@ function renderCurriculum() {
   });
 }
 
-    });
-
-    if(changed && !isDeleted) tr.classList.add("bg-yellow-50");
-    tbody.appendChild(tr);
-  });
-}
-
-function openChangePanel(subjectKey){
-  const norm=clean(subjectKey);
-  const entries = (currentEntry.changes||[]).filter(ch =>
-    same(ch.subject,norm) || same(ch.beforeName,norm) || same(ch.afterName,norm)
+/* ============================
+   변경 패널
+============================ */
+function openChangePanel(subjectKey) {
+  const norm = clean(subjectKey);
+  const entries = (currentEntry.changes || []).filter(ch =>
+    same(ch.subject, norm) ||
+    same(ch.beforeName, norm) ||
+    same(ch.afterName, norm)
   );
 
-  const content=document.getElementById("changeContent");
+  const content = document.getElementById("changeContent");
   content.innerHTML = `<h4 class='font-semibold mb-3'>교과목: ${subjectKey}</h4>`;
 
-  entries.forEach(ch=>{
+  entries.forEach(ch => {
     content.innerHTML += `
       <div class='mb-4 pb-4 border-b'>
-        <p class='font-semibold'>${ch.type}</p>
-        <p>${ch.reason||"-"}</p>
+        <p class='font-semibold mb-1'>변경 유형: ${ch.type}</p>
+        <p class='text-sm text-gray-700 mb-1'>사유: ${ch.reason || "-"}</p>
+        <p class='text-xs text-gray-500'>문서번호: ${ch.changeDocNum || "-"}</p>
+        <p class='text-xs text-gray-500'>회의일: ${ch.changeDate || "-"}</p>
       </div>`;
   });
 
   document.getElementById("overlay").classList.remove("hidden");
   document.getElementById("changePanel").classList.remove("translate-x-full");
-  document.getElementById("overlay").onclick = closeChangePanel;
 }
-
-function closeChangePanel(){
+function closeChangePanel() {
   document.getElementById("overlay").classList.add("hidden");
   document.getElementById("changePanel").classList.add("translate-x-full");
 }
 
-function sortTable(){ renderCurriculum(); }
+/* ============================
+   엑셀 다운로드
+============================ */
+function downloadExcel() {
+  if (!currentEntry) {
+    alert("다운로드할 교육과정이 없습니다.");
+    return;
+  }
 
-function downloadExcel(){
-  if(!currentEntry){ alert("다운로드할 교육과정이 없습니다."); return; }
-  const wb=XLSX.utils.book_new();
-  const rows=[["학과명",selectedTrack],["입학년도",selectedYear],[],["개설학년","개설학기","교과목명","학점","총시수","이론","실습","실험","실기","비고"]];
-  (currentEntry.data||[]).forEach(r=>{
-    rows.push([r["개설학년"],r["개설학기"],r["교과목명"],r["학점"],r["총시수"],r["이론시수"],r["실습시수"],r["실험시수"],r["실기시수"],r["비고"]]);
+  const wb = XLSX.utils.book_new();
+  const rows = [
+    ["학과명", selectedTrack],
+    ["입학년도", selectedYear],
+    [],
+    ["개설학년","개설학기","교과목명","학점","총시수","이론","실습","실험","실기","비고"]
+  ];
+
+  (currentEntry.data || []).forEach(r => {
+    rows.push([
+      r["개설학년"], r["개설학기"], r["교과목명"], r["학점"],
+      r["총시수"], r["이론시수"], r["실습시수"],
+      r["실험시수"], r["실기시수"], r["비고"]
+    ]);
   });
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb,ws,"교육과정");
-  XLSX.writeFile(wb,`${selectedTrack}_${selectedYear}.xlsx`);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, "교육과정");
+  XLSX.writeFile(wb, `${selectedTrack}_${selectedYear}.xlsx`);
 }
 
-document.addEventListener("DOMContentLoaded",()=>{ initTrackButtons(); loadEntries(); });
+/* ============================
+   초기 실행
+============================ */
+document.addEventListener("DOMContentLoaded", () => {
+  initTrackButtons();
+  loadEntries();
+});
 </script>
-
 </body>
 </html>
