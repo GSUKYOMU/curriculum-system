@@ -273,50 +273,55 @@ function renderCurriculum() {
   });
 
 
-  /* ----- 삭제된 과목 출력 (중복 제거) ----- */
-  const existingSubjects = new Set(
-    (currentEntry.data || []).map(r => clean(r["교과목명"]))
-  );
+/* ---------------------------
+     2) 삭제된 과목 자동 표시 (완전 중복 제거)
+--------------------------- */
 
-  const deletedShown = new Set();  // 중복 방지
+// 1) 현재 남아 있는 과목
+const existingSubjects = new Set(
+  (currentEntry.data || []).map(r => clean(r["교과목명"]))
+);
 
-  (currentEntry.changes || []).forEach(ch => {
+// 2) 삭제 후보 과목 수집
+let deleteCandidates = [];
+
+(currentEntry.changes || []).forEach(ch => {
+  if (ch.type === "삭제" || ch.type === "삭제됨") {
     const names = [
       clean(ch.subject),
       clean(ch.beforeName),
       clean(ch.afterName)
     ];
+    deleteCandidates.push(...names.filter(n => n));
+  }
+});
 
-    const subjectName = names.find(n => n) || "";
+// 3) 완전 중복 제거 + 빈 문자열 제거
+const deleteList = Array.from(new Set(deleteCandidates))
+  .filter(name => name && !existingSubjects.has(name));
 
-    if (deletedShown.has(subjectName)) return;
+// 4) 실제로 테이블에 표시
+deleteList.forEach(subjectName => {
+  const tr = document.createElement("tr");
+  tr.className = "bg-red-50 text-red-700";
 
-    if (
-      !existingSubjects.has(subjectName) &&
-      (ch.type === "삭제" || ch.type === "삭제됨")
-    ) {
-      deletedShown.add(subjectName);
+  const td = document.createElement("td");
+  td.colSpan = 10;
+  td.className = "border px-2 py-1";
 
-      let tr = document.createElement("tr");
-      tr.className = "bg-red-50 text-red-700";
+  td.innerHTML = `
+    ❌ <strong>${subjectName}</strong> — 폐지된 과목
+    <button class="ml-2 bg-red-100 border border-red-300 
+        text-red-800 text-xs px-2 py-0.5 rounded-full"
+      onclick='openChangePanel("${subjectName}")'>
+      변경내역 보기
+    </button>
+  `;
 
-      let td = document.createElement("td");
-      td.colSpan = 10;
-      td.className = "border px-2 py-1";
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+});
 
-      td.innerHTML = `
-        ❌ <strong>${subjectName}</strong> — 폐지된 과목
-        <button class="ml-2 bg-red-100 border border-red-300 text-red-800 text-xs px-2 py-0.5 rounded-full"
-          onclick='openChangePanel("${subjectName}")'>
-          변경내역 보기
-        </button>
-      `;
-
-      tr.appendChild(td);
-      tbody.appendChild(tr);
-    }
-  });
-}
 
 
 /* ===========================
