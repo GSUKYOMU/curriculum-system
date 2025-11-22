@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>간호학과 입학자 교육과정 (조회 전용)</title>
+  <title>신학과 입학자 교육과정 (조회 전용)</title>
 
   <!-- TailwindCSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -24,7 +24,7 @@
 
   <div class="max-w-6xl mx-auto py-8 px-4">
     <a href="../index.html" class="text-blue-600 text-sm">&larr; 메인으로</a>
-    <h1 class="text-3xl font-bold mt-2 mb-4">간호학과 입학자 교육과정 (조회 전용)</h1>
+    <h1 class="text-3xl font-bold mt-2 mb-4">신학과 입학자 교육과정 (조회 전용)</h1>
 
     <!-- 조회 전용 안내 -->
     <div class="bg-white rounded-xl shadow p-4 mb-6">
@@ -94,7 +94,7 @@
     공통 유틸
 -------------------------- */
 const STORAGE_KEY = "curriculumData";
-const DEPT_NAME = "간호학과";
+const DEPT_NAME = "신학과";
 
 function clean(v) {
   return (v || "")
@@ -119,7 +119,7 @@ function getData() {
 /* ===========================================================
     PART A: index.html에서 업로드한 데이터만 읽기
 =========================================================== */
-/* 간호학과 페이지에서는 업로드 기능 없음
+/* 신학과 페이지에서는 업로드 기능 없음
    → index.html에서 저장한 curriculumData만 사용 */
 let selectedTrack = DEPT_NAME;
 let selectedYear = null;
@@ -146,7 +146,7 @@ function initTrackButtons() {
 }
 
 /* ===========================================================
-    PART B: 간호학과 데이터만 필터링해서 불러오기
+    PART B: 학과 데이터만 필터링해서 불러오기
 =========================================================== */
 function loadEntries() {
   const all = getData();
@@ -207,6 +207,7 @@ function renderYearButtons() {
 
   renderCurriculum();
 }
+
 /* ===========================================================
     PART D: 변경내역 매핑 (과목명 기준)
 =========================================================== */
