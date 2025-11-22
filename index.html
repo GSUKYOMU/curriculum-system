@@ -14,6 +14,15 @@
   <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
     <h1 class="text-3xl font-bold mb-6 text-center">입학자 교육과정 업로드</h1>
 
+    <!-- 템플릿 다운로드 버튼 (A안: 업로드 입력창 위쪽) -->
+    <a 
+      href="./입학자교육과정 업로드 템플릿.xlsx"
+      download
+      class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 inline-block mb-4"
+    >
+      📥 입학자교육과정 업로드 템플릿 다운로드
+    </a>
+
     <!-- 파일 업로드 -->
     <div class="mb-6">
       <input id="fileInput" type="file" accept=".xlsx,.xls" class="border p-3 rounded w-full"/>
@@ -26,25 +35,20 @@
   </div>
 
   <div class="max-w-4xl mx-auto bg-white p-6 mt-8 rounded-xl shadow">
-    <h2 class="text-2xl font-semibold mb-4">전체 학과 목록</h2>
-    <ul id="deptList" class="list-disc pl-5 space-y-2"></ul>
+    <h2 class="text-2xl font-semibold mb-4">학과별 교육과정 보기</h2>
+    <ul id="deptList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></ul>
   </div>
 
 <script>
-
-// 고정 학과 순서
-const DEPT_ORDER = [
+// 상위 학과 목록 (표시 순서 고정)
+const TOP_DEPTS = [
   "신학과",
   "사회복지학과",
-  "보육과정",
   "상담심리학과",
   "G2빅데이터경영학과",
   "실용음악학과",
   "간호학과",
   "식품영양학과",
-  "G2빅데이터경영학과(국제)",
-  "글로벌경영학과",
-  "AI기반경영학과",
   "외국인전담학과"
 ];
 
@@ -55,7 +59,12 @@ const STORAGE_KEY = "curriculumData";
 // 데이터 불러오기
 // -----------------------------
 function getData() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch (e) {
+    console.error(e);
+    return [];
+  }
 }
 
 // -----------------------------
@@ -80,63 +89,63 @@ function handleUpload() {
   reader.onload = function (e) {
     const workbook = XLSX.read(e.target.result, { type: "binary" });
 
-    // 시트명 반드시 "교육과정"
+    // 시트명은 "교육과정"
     const sheet = workbook.Sheets["교육과정"];
     if (!sheet) {
-      alert("시트 이름이 '교육과정'인지 확인해주세요!");
+      alert("엑셀 시트 이름이 '교육과정'인지 확인해주세요.");
       return;
     }
 
-    // 엑셀 전체를 배열 형태로 읽기
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    // -----------------------------
     // 메타데이터 추출
-    // -----------------------------
     const meta = {
-      dept: rows[0][1]?.trim(),
-      year: rows[1][1]?.trim(),
-      docNum: rows[2][1]?.trim(),
-      revDocNum: rows[3][1]?.trim(),
-      approved: rows[4][1] === "확정",
-      meetingDate: rows[5][1] || ""
+      dept: (rows[0][1] || "").toString().trim(),
+      year: (rows[1][1] || "").toString().trim(),
+      docNum: (rows[2][1] || "").toString().trim(),
+      revDocNum: (rows[3][1] || "").toString().trim(),
+      approved: (rows[4][1] || "").toString().trim() === "확정",
+      meetingDate: (rows[5][1] || "").toString().trim()
     };
 
-    // -----------------------------
-    // 본문 데이터(교육과정 테이블)
-    // -----------------------------
-    let startRow = 0;
+    if (!meta.dept || !meta.year || !meta.docNum) {
+      alert("학과명, 입학년도, 문서번호는 반드시 입력되어야 합니다.");
+      return;
+    }
+
+    // 교육과정 테이블 시작 위치 찾기
+    let startRow = -1;
     for (let i = 0; i < rows.length; i++) {
       if (rows[i][0] === "개설학년") {
         startRow = i;
         break;
       }
     }
+    if (startRow === -1) {
+      alert("교육과정 표의 헤더가 있는지 확인해주세요.");
+      return;
+    }
 
     const headers = rows[startRow];
-    const dataRows = rows.slice(startRow + 1);
+    const dataRows = rows.slice(startRow + 1).filter(r => r.some(cell => cell !== undefined && cell !== null && cell !== ""));
 
     const curriculum = dataRows.map(row => {
       const obj = {};
-      headers.forEach((h, i) => {
-        obj[h] = row[i] || "";
-      });
+      headers.forEach((h, i) => { obj[h] = row[i] ?? ""; });
       return obj;
     });
 
-    // 기존 데이터 불러오기
     let allData = getData();
 
-    // 이전 문서 찾기 (문서번호로 매칭)
-    const prev = allData.find(d => d.dept === meta.dept && d.docNum === meta.docNum);
-
-    // 변경내역 비교
-    let changes = null;
-    if (prev) {
-      changes = compareChanges(prev.data, curriculum);
+    // 이전 문서 찾기
+    let prev = null;
+    if (meta.revDocNum) {
+      prev = allData.find(d => d.dept === meta.dept && d.docNum === meta.revDocNum);
     }
 
-    // 저장할 항목 구성
+    // 변경 비교
+    const changes = prev ? compareChanges(prev.data, curriculum) : null;
+
     const entry = {
       ...meta,
       data: curriculum,
@@ -144,14 +153,11 @@ function handleUpload() {
       uploadDate: new Date().toISOString()
     };
 
-    // 기존 데이터에서 동일 문서 삭제
     allData = allData.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
-
-    // 새로운 데이터 추가
     allData.push(entry);
     saveData(allData);
 
-    alert("업로드 완료!");
+    alert("업로드가 완료되었습니다!");
     renderDeptList();
   };
 
@@ -163,41 +169,33 @@ function handleUpload() {
 // -----------------------------
 function compareChanges(prevData, newData) {
   const changes = [];
-
-  // 과목명 기준 비교
   const prevMap = {};
-  prevData.forEach(item => {
-    prevMap[item["교과목명"]] = item;
-  });
+  const newMap = {};
 
-  newData.forEach(item => {
-    const name = item["교과목명"];
-    if (!prevMap[name]) {
-      changes.push({
-        type: "추가됨",
-        subject: name,
-        before: null,
-        after: item
-      });
+  prevData.forEach(item => { if (item?.["교과목명"]) prevMap[item["교과목명"]] = item; });
+  newData.forEach(item => { if (item?.["교과목명"]) newMap[item["교과목명"]] = item; });
+
+  Object.keys(newMap).forEach(name => {
+    const newItem = newMap[name];
+    const oldItem = prevMap[name];
+    if (!oldItem) {
+      changes.push({ type: "추가됨", subject: name, before: null, after: newItem });
     } else {
-      // 항목별 비교
       const diff = {};
-      Object.keys(item).forEach(key => {
-        if (item[key] !== prevMap[name][key]) {
-          diff[key] = {
-            before: prevMap[name][key],
-            after: item[key]
-          };
+      Object.keys(newItem).forEach(key => {
+        if ((newItem[key] ?? "") !== (oldItem[key] ?? "")) {
+          diff[key] = { before: oldItem[key] ?? "", after: newItem[key] ?? "" };
         }
       });
-
       if (Object.keys(diff).length > 0) {
-        changes.push({
-          type: "변경됨",
-          subject: name,
-          detail: diff
-        });
+        changes.push({ type: "변경됨", subject: name, detail: diff });
       }
+    }
+  });
+
+  Object.keys(prevMap).forEach(name => {
+    if (!newMap[name]) {
+      changes.push({ type: "삭제됨", subject: name, before: prevMap[name], after: null });
     }
   });
 
@@ -211,21 +209,19 @@ function renderDeptList() {
   const list = document.getElementById("deptList");
   list.innerHTML = "";
 
-  const saved = getData();
-
-  const deptSet = new Set(saved.map(d => d.dept));
-
-  [...DEPT_ORDER]
-    .filter(d => deptSet.has(d))
-    .forEach(dept => {
-      const li = document.createElement("li");
-      li.innerHTML = `<a href="./dept/${dept}.html" class="text-blue-600 underline">${dept}</a>`;
-      list.appendChild(li);
-    });
+  TOP_DEPTS.forEach(dept => {
+    list.innerHTML += `
+      <li class="border rounded-lg px-4 py-3 hover:bg-gray-50">
+        <a href="./dept/${dept}.html" class="flex items-center justify-between">
+          <span class="font-semibold">${dept}</span>
+          <span class="text-sm text-blue-600">보기</span>
+        </a>
+      </li>
+    `;
+  });
 }
 
 renderDeptList();
-
 </script>
 
 </body>
