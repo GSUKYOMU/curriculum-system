@@ -253,10 +253,10 @@ function downloadExcel(){
 }
 
 document.addEventListener("DOMContentLoaded",()=>{
-  const dept=document.title.replace(" 신학과 입학자 교육과정 (조회 전용)","");
+  const dept=document.title.replace("신학과 입학자 교육과정 (조회 전용)","");
   DEPT_NAME=dept;
   selectedTrack=dept;
-  document.getElementById("deptTitle").textContent=dept+" 신학과 입학자 교육과정 (조회 전용)";
+  document.getElementById("deptTitle").textContent=dept+"신학과 입학자 교육과정 (조회 전용)";
   initTrackButtons();
   loadEntries();
 });
