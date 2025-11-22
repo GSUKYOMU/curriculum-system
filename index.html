@@ -34,12 +34,6 @@
             class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
       업로드
     </button>
-
-    <!-- 전체 초기화 버튼 -->
-    <button onclick="resetStorage()"
-            class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 mt-3">
-      🔄 전체 초기화
-    </button>
   </div>
 
 
@@ -137,7 +131,6 @@ function handleUpload(){
       meetingDate: (rows[5][1] || "").toString().trim()
     };
 
-    // 숫자 → 문자열 자동 변환
     meta.year = String(meta.year).trim();
 
     if(!meta.dept || !meta.year || !meta.docNum){
@@ -192,7 +185,6 @@ function handleUpload(){
       uploadDate: new Date().toISOString()
     };
 
-    // 동일 문서번호 삭제 후 덮어쓰기
     all = all.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
     all.push(entry);
 
@@ -218,7 +210,6 @@ function compare(prev, next){
   prev.forEach(i => { if(i["교과목명"]) prevMap[i["교과목명"]] = i; });
   next.forEach(i => { if(i["교과목명"]) nextMap[i["교과목명"]] = i; });
 
-  // 추가됨
   Object.keys(nextMap).forEach(subj => {
     if(!prevMap[subj]){
       changes.push({ type:"추가됨", subject: subj, after: nextMap[subj] });
@@ -238,7 +229,6 @@ function compare(prev, next){
     }
   });
 
-  // 삭제됨
   Object.keys(prevMap).forEach(subj => {
     if(!nextMap[subj]){
       changes.push({ type:"삭제됨", subject: subj, before: prevMap[subj] });
@@ -308,18 +298,6 @@ function deleteEntry(index){
     all.splice(index, 1);
     saveData(all);
     renderUploadHistory();
-  }
-}
-
-
-/* ---------------------------
-   전체 초기화
---------------------------- */
-function resetStorage(){
-  if(confirm("정말 전체 데이터를 초기화하시겠습니까?\n(모든 업로드 기록이 삭제됩니다)")){
-    localStorage.removeItem("curriculumData");
-    alert("초기화 완료! 페이지를 새로고침합니다.");
-    location.reload();
   }
 }
 
