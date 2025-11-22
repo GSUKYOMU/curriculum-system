@@ -4,6 +4,7 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>간호학과 입학자 교육과정</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
@@ -33,7 +34,7 @@
       </button>
 
       <div id="noData" class="text-gray-500 text-sm hidden">
-        선택한 과정/입학년도에 해당하는 교육과정이 없습니다.
+        선택한 과정 / 입학년도에 해당하는 교육과정이 없습니다.
       </div>
 
       <div class="overflow-x-auto">
@@ -79,13 +80,13 @@ let selectedYear = null;
 let currentEntries = [];
 let currentEntry = null;
 
-// LocalStorage 가져오기
+// LocalStorage 읽기
 function getData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
   catch (e) { return []; }
 }
 
-// 과정 버튼 생성
+// 과정 버튼 초기화
 function initTrackButtons() {
   const c = document.getElementById("trackButtons");
   c.innerHTML = "";
@@ -106,7 +107,7 @@ function initTrackButtons() {
   });
 }
 
-// 연도별 데이터 로드
+// 해당 학과 데이터 가져오기
 function loadEntries() {
   const all = getData();
   const filtered = all.filter(d => d.dept === selectedTrack);
@@ -122,7 +123,7 @@ function loadEntries() {
   renderYearButtons();
 }
 
-// 연도 버튼 생성
+// 입학년도 버튼 렌더링
 function renderYearButtons() {
   const c = document.getElementById("yearButtons");
   c.innerHTML = "";
@@ -143,8 +144,7 @@ function renderYearButtons() {
       "px-3 py-1 rounded-full border " +
       (e.year === selectedYear ? "bg-indigo-600 text-white" : "bg-white text-gray-700");
 
-    const hasChanges = e.changes && e.changes.length > 0;
-    if (hasChanges) {
+    if (e.changes && e.changes.length > 0) {
       const mark = document.createElement("span");
       mark.textContent = "변경 있음";
       mark.className = "text-red-500 text-xs ml-1";
@@ -192,6 +192,7 @@ function renderCurriculum() {
       const td = document.createElement("td");
       td.className = "border px-2 py-1 whitespace-nowrap";
 
+      // 교과목명 + 변경내역 버튼
       if (idx === 2 && changed) {
         td.innerHTML =
           `<button class="bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full"
@@ -252,10 +253,10 @@ function openChangePanel(subject) {
   overlay.onclick = closeChangePanel;
 }
 
-// 변경 패널 닫기
+// 패널 닫기
 function closeChangePanel() {
   document.getElementById("overlay").classList.add("hidden");
-  document.getElementById("changePanel").classList.add("translate-x-full");
+  document.getElementById ("changePanel").classList.add("translate-x-full");
 }
 
 // 엑셀 다운로드
@@ -273,4 +274,31 @@ function downloadExcel() {
     ["문서번호", currentEntry.docNum],
     ["수정문서번호", currentEntry.revDocNum || ""],
     ["교육과정위원회 확정여부", currentEntry.approved ? "확정" : "미확정"],
-    ["교육과정위원회 개최일", current
+    ["교육과정위원회 개최일", currentEntry.meetingDate || ""],
+    [],
+    ["개설학년","개설학기","교과목명","수준","이수구분",
+     "학점","총시수","이론시수","실습시수","실험시수","실기시수","비고"]
+  ];
+
+  currentEntry.data.forEach(r => {
+    rows.push([
+      r["개설학년"], r["개설학기"], r["교과목명"], r["수준"], r["이수구분"],
+      r["학점"], r["총시수"], r["이론시수"], r["실습시수"], r["실험시수"], r["실기시수"], r["비고"]
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  XLSX.utils.book_append_sheet(wb, ws, "교육과정");
+
+  const filename = `${currentEntry.dept}_${currentEntry.year}_입학자교육과정.xlsx`;
+  XLSX.writeFile(wb, filename);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  initTrackButtons();
+  loadEntries();
+});
+</script>
+
+</body>
+</html>
