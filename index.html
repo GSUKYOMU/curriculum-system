@@ -578,10 +578,15 @@ function deleteEntry(logIndex) {
 
   // 교육과정 템플릿인 경우 curriculumData에서도 삭제
   if (target.kind === "교육과정") {
-    let all = getData();
-    all = all.filter(e => !(e.dept === target.dept && same(e.year, target.year) && e.docNum === target.docNum));
-    saveData(all);
-  }
+  let all = getData();
+
+  // 🔥 핵심: 동일 학과 + 동일 입학년도 모든 entry 삭제
+  all = all.filter(e =>
+    !(e.dept === target.dept && same(e.year, target.year))
+  );
+
+  saveData(all);
+}
 
   // 로그에서 제거
   logs.splice(logIndex, 1);
