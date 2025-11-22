@@ -530,8 +530,13 @@ function renderDeptList() {
    업로드 기록 렌더링 (교육과정 + 변경사유서)
 --------------------------- */
 function renderUploadHistory() {
-  const logs = getLogs()
-    .sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+const originalLogs = getLogs();
+
+// 원본 인덱스 함께 저장 후 정렬
+const logs = originalLogs
+  .map((log, i) => ({ ...log, _originalIndex: i }))
+  .sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+
 
   const tbody = document.getElementById("uploadHistory");
   tbody.innerHTML = "";
@@ -546,7 +551,7 @@ function renderUploadHistory() {
       <td class="border px-2 py-1">${e.kind || ""}</td>
       <td class="border px-2 py-1">${e.uploadDate ? new Date(e.uploadDate).toLocaleString() : ""}</td>
       <td class="border px-2 py-1 text-center">
-        <button onclick="deleteEntry(${idx})"
+        <button onclick="deleteEntry(${e._originalIndex})"
                 class="text-red-600 hover:text-red-800 text-sm">
           🗑 삭제
         </button>
