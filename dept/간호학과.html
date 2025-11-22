@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>간호학과 입학자 교육과정</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+
+  <div class="max-w-6xl mx-auto py-8 px-4">
+    <a href="../index.html" class="text-blue-600 text-sm">&larr; 메인으로 돌아가기</a>
+    <h1 class="text-3xl font-bold mt-2 mb-4">간호학과 입학자 교육과정</h1>
+
+    <!-- 과정 선택 -->
+    <div class="bg-white rounded-xl shadow p-4 mb-6">
+      <h2 class="text-xl font-semibold mb-3">과정 선택</h2>
+      <div id="trackButtons" class="flex flex-wrap gap-2"></div>
+    </div>
+
+    <!-- 입학년도 선택 및 다운로드 -->
+    <div class="bg-white rounded-xl shadow p-4">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2">
+        <h2 class="text-xl font-semibold">입학년도별 최종 교육과정</h2>
+        <div id="yearButtons" class="flex flex-wrap gap-2 text-sm"></div>
+      </div>
+
+      <button onclick="downloadExcel()"
+        class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 mb-4 text-sm">
+        📥 현재 교육과정 엑셀 다운로드
+      </button>
+
+      <div id="noData" class="text-gray-500 text-sm hidden">
+        선택한 과정/입학년도에 해당하는 교육과정이 없습니다.
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm border" id="curriculumTable">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="border px-2 py-1">개설학년</th>
+              <th class="border px-2 py-1">개설학기</th>
+              <th class="border px-2 py-1">교과목명</th>
+              <th class="border px-2 py-1">학점</th>
+              <th class="border px-2 py-1">총시수</th>
+              <th class="border px-2 py-1">이론</th>
+              <th class="border px-2 py-1">실습</th>
+              <th class="border px-2 py-1">실험</th>
+              <th class="border px-2 py-1">실기</th>
+              <th class="border px-2 py-1">비고</th>
+            </tr>
+          </thead>
+          <tbody id="curriculumBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 변경내역 패널 -->
+  <div id="overlay" class="fixed inset-0 bg-black bg-opacity-30 hidden"></div>
+  <div id="changePanel" class="fixed top-0 right-0 h-full w-full md:w-1/3 bg-white shadow-xl transform translate-x-full transition-transform duration-200">
+    <div class="p-4 border-b flex items-center justify-between">
+      <h3 class="text-lg font-semibold">변경 내역</h3>
+      <button onclick="closeChangePanel()" class="text-sm text-gray-500">닫기</button>
+    </div>
+    <div id="changeContent" class="p-4 text-sm overflow-y-auto"></div>
+  </div>
+
+
+<script>
+const PARENT_DEPT = "간호학과";
+const TRACKS = ["간호학과"];
+const STORAGE_KEY = "curriculumData";
+
+let selectedTrack = TRACKS[0];
+let selectedYear = null;
+let currentEntries = [];
+let currentEntry = null;
+
+// LocalStorage 가져오기
+function getData() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
+  catch (e) { return []; }
+}
+
+// 과정 버튼 생성
+function initTrackButtons() {
+  const c = document.getElementById("trackButtons");
+  c.innerHTML = "";
+  TRACKS.forEach(track => {
+    const btn = document.createElement("button");
+    btn.textContent = track;
+    btn.className =
+      "px-3 py-1 rounded-full border text-sm " +
+      (track === selectedTrack ? "bg-blue-600 text-white" : "bg-white text-gray-700");
+
+    btn.onclick = () => {
+      selectedTrack = track;
+      selectedYear = null;
+      loadEntries();
+      initTrackButtons();
+    };
+    c.appendChild(btn);
+  });
+}
+
+// 연도별 데이터 로드
+function loadEntries() {
+  const all = getData();
+  const filtered = all.filter(d => d.dept === selectedTrack);
+
+  const map = {};
+  filtered.forEach(e => {
+    if (!map[e.year] || map[e.year].uploadDate < e.uploadDate) {
+      map[e.year] = e;
+    }
+  });
+
+  currentEntries = Object.values(map).sort((a, b) => a.year.localeCompare(b.year));
+  renderYearButtons();
+}
+
+// 연도 버튼 생성
+function renderYearButtons() {
+  const c = document.getElementById("yearButtons");
+  c.innerHTML = "";
+
+  if (currentEntries.length === 0) {
+    document.getElementById("noData").classList.remove("hidden");
+    return;
+  }
+
+  document.getElementById("noData").classList.add("hidden");
+
+  if (!selectedYear) selectedYear = currentEntries[0].year;
+
+  currentEntries.forEach(e => {
+    const btn = document.createElement("button");
+    btn.textContent = e.year + " 입학자";
+    btn.className =
+      "px-3 py-1 rounded-full border " +
+      (e.year === selectedYear ? "bg-indigo-600 text-white" : "bg-white text-gray-700");
+
+    const hasChanges = e.changes && e.changes.length > 0;
+    if (hasChanges) {
+      const mark = document.createElement("span");
+      mark.textContent = "변경 있음";
+      mark.className = "text-red-500 text-xs ml-1";
+      btn.appendChild(mark);
+    }
+
+    btn.onclick = () => {
+      selectedYear = e.year;
+      renderYearButtons();
+    };
+
+    c.appendChild(btn);
+  });
+
+  renderCurriculum();
+}
+
+// 교육과정 표 렌더링
+function renderCurriculum() {
+  currentEntry = currentEntries.find(e => e.year === selectedYear);
+  const tbody = document.getElementById("curriculumBody");
+  tbody.innerHTML = "";
+
+  if (!currentEntry) return;
+
+  const changes = currentEntry.changes || [];
+  const changeMap = {};
+
+  changes.forEach(c => {
+    if (!changeMap[c.subject]) changeMap[c.subject] = [];
+    changeMap[c.subject].push(c);
+  });
+
+  (currentEntry.data || []).forEach(row => {
+    const tr = document.createElement("tr");
+    const subject = row["교과목명"];
+    const changed = !!changeMap[subject];
+
+    const cells = [
+      row["개설학년"], row["개설학기"], subject, row["학점"], row["총시수"],
+      row["이론시수"], row["실습시수"], row["실험시수"], row["실기시수"], row["비고"]
+    ];
+
+    cells.forEach((v, idx) => {
+      const td = document.createElement("td");
+      td.className = "border px-2 py-1 whitespace-nowrap";
+
+      if (idx === 2 && changed) {
+        td.innerHTML =
+          `<button class="bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full"
+            onclick="openChangePanel('${subject}')">${subject} 변경내역</button>`;
+      } else {
+        td.textContent = v || "";
+      }
+
+      tr.appendChild(td);
+    });
+
+    if (changed) tr.classList.add("bg-yellow-50");
+    tbody.appendChild(tr);
+  });
+}
+
+// 변경 패널 열기
+function openChangePanel(subject) {
+  const entry = currentEntry.changes.filter(c => c.subject === subject);
+  const panel = document.getElementById("changePanel");
+  const overlay = document.getElementById("overlay");
+  const content = document.getElementById("changeContent");
+
+  content.innerHTML = `<h4 class="font-semibold mb-3">교과목: ${subject}</h4>`;
+
+  entry.forEach(ch => {
+    let html = "";
+
+    if (ch.type === "추가됨") {
+      html += `<p class="text-green-700 mb-2">새로 추가된 과목입니다.</p>`;
+    } else if (ch.type === "삭제됨") {
+      html += `<p class="text-red-700 mb-2">이전 버전에서 삭제된 과목입니다.</p>`;
+    } else if (ch.type === "변경됨") {
+      html += `<table class="text-xs w-full border mb-3">
+        <thead><tr class="bg-gray-100">
+          <th class="border px-1">항목</th>
+          <th class="border px-1">변경 전</th>
+          <th class="border px-1">변경 후</th>
+        </tr></thead>
+        <tbody>`;
+
+      Object.keys(ch.detail).forEach(k => {
+        html += `<tr>
+          <td class="border px-1">${k}</td>
+          <td class="border px-1">${ch.detail[k].before || ""}</td>
+          <td class="border px-1">${ch.detail[k].after || ""}</td>
+        </tr>`;
+      });
+
+      html += `</tbody></table>`;
+    }
+
+    content.innerHTML += html + "<hr class='my-2'>";
+  });
+
+  overlay.classList.remove("hidden");
+  panel.classList.remove("translate-x-full");
+  overlay.onclick = closeChangePanel;
+}
+
+// 변경 패널 닫기
+function closeChangePanel() {
+  document.getElementById("overlay").classList.add("hidden");
+  document.getElementById("changePanel").classList.add("translate-x-full");
+}
+
+// 엑셀 다운로드
+function downloadExcel() {
+  if (!currentEntry) {
+    alert("다운로드할 교육과정이 없습니다.");
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  const rows = [
+    ["학과명", currentEntry.dept],
+    ["입학년도", currentEntry.year],
+    ["문서번호", currentEntry.docNum],
+    ["수정문서번호", currentEntry.revDocNum || ""],
+    ["교육과정위원회 확정여부", currentEntry.approved ? "확정" : "미확정"],
+    ["교육과정위원회 개최일", current
