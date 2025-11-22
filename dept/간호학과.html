@@ -69,9 +69,10 @@
     </div>
     <div id="changeContent" class="p-4 text-sm overflow-y-auto"></div>
   </div>
-
-
 <script>
+/* -------------------------
+    기본 설정
+-------------------------- */
 const PARENT_DEPT = "간호학과";
 const TRACKS = ["간호학과"];
 const STORAGE_KEY = "curriculumData";
@@ -80,18 +81,20 @@ let selectedTrack = TRACKS[0];
 let selectedYear = null;
 let currentEntries = [];
 let currentEntry = null;
-let sortState = {};  // 각 열 정렬 상태 저장 (asc / desc)
+let sortState = {};  // 정렬 상태 저장
 
-// LocalStorage 읽기
 function getData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
   catch (e) { return []; }
 }
 
-// 과정 버튼
+/* -------------------------
+    과정 선택 버튼
+-------------------------- */
 function initTrackButtons() {
   const c = document.getElementById("trackButtons");
   c.innerHTML = "";
+
   TRACKS.forEach(track => {
     const btn = document.createElement("button");
     btn.textContent = track;
@@ -109,7 +112,9 @@ function initTrackButtons() {
   });
 }
 
-// 해당 학과 데이터 가져오기
+/* -------------------------
+    학과 데이터 로딩
+-------------------------- */
 function loadEntries() {
   const all = getData();
   const filtered = all.filter(d => d.dept === selectedTrack);
@@ -125,7 +130,9 @@ function loadEntries() {
   renderYearButtons();
 }
 
-// 입학년도 버튼
+/* -------------------------
+    입학년도 버튼
+-------------------------- */
 function renderYearButtons() {
   const c = document.getElementById("yearButtons");
   c.innerHTML = "";
@@ -164,7 +171,9 @@ function renderYearButtons() {
   renderCurriculum();
 }
 
-// 교육과정 표 렌더링
+/* -------------------------
+    교육과정 테이블 출력
+-------------------------- */
 function renderCurriculum() {
   currentEntry = currentEntries.find(e => e.year === selectedYear);
   const tbody = document.getElementById("curriculumBody");
@@ -210,7 +219,9 @@ function renderCurriculum() {
   });
 }
 
-// ⭐ 정렬 기능 추가
+/* -------------------------
+    정렬 기능
+-------------------------- */
 function sortTable(colIndex) {
   if (!currentEntry) return;
 
@@ -246,48 +257,72 @@ function sortTable(colIndex) {
   renderCurriculum();
 }
 
-// 변경내역 패널
+/* -------------------------
+    변경내역 패널 (🟡 여기 핵심 개선)
+-------------------------- */
 function openChangePanel(subject) {
-  const entry = currentEntry.changes.filter(c => c.subject === subject);
-  const panel = document.getElementById("changePanel");
-  const overlay = document.getElementById("overlay");
+  const entries = currentEntry.changes.filter(c => c.subject === subject);
   const content = document.getElementById("changeContent");
 
   content.innerHTML = `<h4 class="font-semibold mb-3">교과목: ${subject}</h4>`;
 
-  entry.forEach(ch => {
-    let html = "";
-
-    if (ch.type === "추가됨") {
-      html += `<p class="text-green-700 mb-2">새로 추가된 과목입니다.</p>`;
+  entries.forEach(ch => {
+    // 변경 종류 라벨
+    let typeLabel = "";
+    if (ch.type === "추가" || ch.type === "추가됨") {
+      typeLabel = `<p class="text-green-700 font-semibold mb-2">🆕 신규 개설</p>`;
     } else if (ch.type === "삭제됨") {
-      html += `<p class="text-red-700 mb-2">이전 버전에서 삭제된 과목입니다.</p>`;
-    } else if (ch.type === "변경됨") {
-      html += `<table class="text-xs w-full border mb-3">
-        <thead><tr class="bg-gray-100">
-          <th class="border px-1">항목</th>
-          <th class="border px-1">변경 전</th>
-          <th class="border px-1">변경 후</th>
-        </tr></thead>
-        <tbody>`;
+      typeLabel = `<p class="text-red-700 font-semibold mb-2">❌ 삭제됨</p>`;
+    } else if (ch.type === "변경" || ch.type === "변경됨") {
+   typeLabel = `<p class="text-amber-700 font-semibold mb-2"✏️ 내용 변경</p>`;
 
-      Object.keys(ch.detail).forEach(k => {
-        html += `<tr>
-          <td class="border px-1">${k}</td>
-          <td class="border px-1">${ch.detail[k].before || ""}</td>
-          <td class="border px-1">${ch.detail[k].after || ""}</td>
-        </tr>`;
-      });
-
-      html += `</tbody></table>`;
     }
 
-    content.innerHTML += html + "<hr class='my-2'>";
+    // 상세 변경 테이블 생성
+    let detailHTML = "";
+    if (ch.detail && Object.keys(ch.detail).length > 0) {
+      detailHTML += `
+        <table class="text-xs w-full border mb-3">
+          <thead>
+            <tr class="bg-gray-100">
+              <th class="border px-1 py-0.5">항목</th>
+              <th class="border px-1 py-0.5">변경 전</th>
+              <th class="border px-1 py-0.5">변경 후</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      Object.keys(ch.detail).forEach(k => {
+        detailHTML += `
+          <tr>
+            <td class="border px-1 py-0.5">${k}</td>
+            <td class="border px-1 py-0.5">${ch.detail[k].before || ""}</td>
+            <td class="border px-1 py-0.5">${ch.detail[k].after || ""}</td>
+          </tr>
+        `;
+      });
+      detailHTML += `</tbody></table>`;
+    }
+
+    // 출력
+    content.innerHTML += `
+      <div class="mb-4 pb-4 border-b">
+        ${typeLabel}
+
+        ${detailHTML}
+
+        <p class="text-xs text-gray-600 mt-2">📄 변경사유:</p>
+        <p class="text-xs mb-2">${ch.reason || "사유 미작성"}</p>
+
+        <p class="text-xs text-gray-500">문서번호: ${ch.changeDocNum || "-"}</p>
+        <p class="text-xs text-gray-500">회의일: ${ch.changeDate || "-"}</p>
+      </div>
+    `;
   });
 
-  overlay.classList.remove("hidden");
-  panel.classList.remove("translate-x-full");
-  overlay.onclick = closeChangePanel;
+  document.getElementById("overlay").classList.remove("hidden");
+  document.getElementById("changePanel").classList.remove("translate-x-full");
+  document.getElementById("overlay").onclick = closeChangePanel;
 }
 
 function closeChangePanel() {
@@ -295,7 +330,9 @@ function closeChangePanel() {
   document.getElementById("changePanel").classList.add("translate-x-full");
 }
 
-// 엑셀 다운로드
+/* -------------------------
+    엑셀 다운로드
+-------------------------- */
 function downloadExcel() {
   if (!currentEntry) {
     alert("다운로드할 교육과정이 없습니다.");
@@ -332,11 +369,14 @@ function downloadExcel() {
   XLSX.writeFile(wb, filename);
 }
 
+/* -------------------------
+    초기 로딩
+-------------------------- */
 document.addEventListener("DOMContentLoaded", () => {
   initTrackButtons();
   loadEntries();
 });
 </script>
-
 </body>
 </html>
+
