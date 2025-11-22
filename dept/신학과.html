@@ -126,46 +126,104 @@ function buildChangeMap(changes){
   return map;
 }
 
-function renderCurriculum(){
-  currentEntry=currentEntries.find(e=>e.year===selectedYear);
-  const tbody=document.getElementById("curriculumBody");
-  tbody.innerHTML="";
-  if(!currentEntry) return;
+function renderCurriculum() {
+  currentEntry = currentEntries.find(e => e.year === selectedYear);
+  const tbody = document.getElementById("curriculumBody");
+  tbody.innerHTML = "";
+  if (!currentEntry) return;
 
-  const changes=currentEntry.changes||[];
+  const changes = currentEntry.changes || [];
   const changeMap = buildChangeMap(changes);
 
-  (currentEntry.data||[]).forEach(row=>{
+  /* ---------------------------
+      1) 정상 과목 출력
+  --------------------------- */
+  (currentEntry.data || []).forEach(row => {
     let subject = clean(row["교과목명"]);
     let changed = !!changeMap[subject];
     let isDeleted = row._deleted;
-    let tr=document.createElement("tr");
+    let tr = document.createElement("tr");
 
-    const fields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수","비고"];
-    fields.forEach((key,idx)=>{
-      let v=row[key]||"";
-      let td=document.createElement("td");
-      td.className="border px-2 py-1 whitespace-nowrap";
+    const fields = [
+      "개설학년","개설학기","교과목명","학점",
+      "총시수","이론시수","실습시수","실험시수","실기시수","비고"
+    ];
 
-if (key === "교과목명") {
-  if (isDeleted) {
-    td.innerHTML = `<span class='strike-delete'>${v} (삭제됨)</span>`;
-  } else if (changed) {
-    td.innerHTML = `
-      <button class='bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full'
-              onclick='openChangePanel("${subject}")'>
-        ${v} 변경내역
-      </button>
-    `;
-  } else {
-    td.textContent = (v === 0 || v === "0") ? "0" : (v ?? "");
-  }
-} else {
-  if (isDeleted) td.classList.add("strike-delete");
-  td.textContent = (v === 0 || v === "0") ? "0" : (v ?? "");
-}
+    fields.forEach((key, idx) => {
+      let v = row[key] || "";
+      let td = document.createElement("td");
+      td.className = "border px-2 py-1 whitespace-nowrap";
+
+      // 교과목명 부분
+      if (key === "교과목명") {
+        if (isDeleted) {
+          td.innerHTML = `<span class='strike-delete'>${v} (삭제됨)</span>`;
+        } else if (changed) {
+          td.innerHTML = `
+            <button class='bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full'
+                    onclick='openChangePanel("${subject}")'>
+              ${v} 변경내역
+            </button>
+          `;
+        } else {
+          td.textContent = (v === 0 || v === "0") ? "0" : (v ?? "");
+        }
+      } else {
+        if (isDeleted) td.classList.add("strike-delete");
+        td.textContent = (v === 0 || v === "0") ? "0" : (v ?? "");
+      }
 
       tr.appendChild(td);
+    });
+
+    if (changed && !isDeleted) tr.classList.add("bg-yellow-50");
+    tbody.appendChild(tr);
+  });
+
+  /* ---------------------------
+      2) 삭제된 과목 자동 표시
+      (currentEntry.data에는 없지만 변경내역엔 있는 경우)
+  --------------------------- */
+
+  const existingSubjects = new Set(
+    (currentEntry.data || []).map(r => clean(r["교과목명"]))
+  );
+
+  (currentEntry.changes || []).forEach(ch => {
+    const names = [
+      clean(ch.subject),
+      clean(ch.beforeName),
+      clean(ch.afterName)
+    ];
+
+    const subjectName = names.find(n => n) || "";
+
+    // 실제 목록에 없고 변경 유형이 삭제라면 "폐지된 과목"으로 표시
+    if (
+      !existingSubjects.has(subjectName) &&
+      (ch.type === "삭제" || ch.type === "삭제됨")
+    ) {
+      const tr = document.createElement("tr");
+      tr.className = "bg-red-50 text-red-700";
+
+      const td = document.createElement("td");
+      td.colSpan = 10;
+      td.className = "border px-2 py-1";
+
+      td.innerHTML = `
+        ❌ <strong>${subjectName}</strong> — <span class="text-sm">폐지된 과목</span>
+        <button class="ml-2 bg-red-100 border border-red-300 text-red-800 text-xs px-2 py-0.5 rounded-full"
+          onclick='openChangePanel("${subjectName}")'>
+          변경내역 보기
+        </button>
+      `;
+
+      tr.appendChild(td);
+      tbody.appendChild(tr);
+    }
+  });
+}
+
     });
 
     if(changed && !isDeleted) tr.classList.add("bg-yellow-50");
