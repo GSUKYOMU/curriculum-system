@@ -7,6 +7,13 @@
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+  <style>
+    /* 테이블 강조 색상 */
+    .changed-row {
+      background-color: #fff8dc !important;
+    }
+  </style>
 </head>
 
 <body class="bg-gray-100 min-h-screen">
@@ -20,7 +27,6 @@
       <h2 class="text-xl font-semibold mb-3">과정 선택</h2>
       <div id="trackButtons" class="flex flex-wrap gap-2"></div>
     </div>
-
     <!-- 입학년도 선택 및 다운로드 -->
     <div class="bg-white rounded-xl shadow p-4">
       <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2">
@@ -69,7 +75,6 @@
     </div>
     <div id="changeContent" class="p-4 text-sm overflow-y-auto"></div>
   </div>
-
 <script>
 /* -------------------------
     기본 설정
@@ -84,24 +89,38 @@ let currentEntries = [];
 let currentEntry = null;
 let sortState = {};  // 정렬 상태 저장
 
+/* ---------------------------------------------------
+   유니코드 정규화 + 공백 정리 + 문자열 비교 통일
+--------------------------------------------------- */
 function clean(v) {
   return (v || "")
     .toString()
-    .normalize("NFKC")
-    .replace(/ /g, " ")
+    .normalize("NFKC")           // Ⅰ(로마숫자) vs I(영문 대문자) 같은 문제 해결
+    .replace(/\s+/g, " ")        // 공백 여러개 → 한 개
+    .replace(/ /g, " ")          // 특수 공백 제거
     .trim();
+}
+
+function same(a, b) {
+  return clean(a) === clean(b);
 }
 
 /* -------------------------
     데이터 가져오기
 -------------------------- */
 function getData() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-  catch (e) { return []; }
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  } catch (e) {
+    return [];
+  }
 }
 
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
 /* -------------------------
-    과정 선택 버튼
+    과정 선택 버튼 생성
 -------------------------- */
 function initTrackButtons() {
   const c = document.getElementById("trackButtons");
@@ -120,6 +139,7 @@ function initTrackButtons() {
       loadEntries();
       initTrackButtons();
     };
+
     c.appendChild(btn);
   });
 }
@@ -129,21 +149,22 @@ function initTrackButtons() {
 -------------------------- */
 function loadEntries() {
   const all = getData();
-  const filtered = all.filter(d => d.dept === selectedTrack);
+  const filtered = all.filter(d => same(d.dept, selectedTrack));
 
   const map = {};
   filtered.forEach(e => {
-    if (!map[e.year] || map[e.year].uploadDate < e.uploadDate) {
+    // 동일 연도에서 가장 최근 uploadDate만 선택
+    if (!map[e.year] || new Date(map[e.year].uploadDate) < new Date(e.uploadDate)) {
       map[e.year] = e;
     }
   });
 
-  currentEntries = Object.values(map).sort((a, b) => a.year.localeCompare(b.year));
+  currentEntries = Object.values(map).sort((a, b) => clean(a.year).localeCompare(clean(b.year)));
   renderYearButtons();
 }
 
 /* -------------------------
-    입학년도 버튼
+    입학년도 버튼 렌더링
 -------------------------- */
 function renderYearButtons() {
   const c = document.getElementById("yearButtons");
@@ -155,16 +176,16 @@ function renderYearButtons() {
   }
 
   document.getElementById("noData").classList.add("hidden");
-
   if (!selectedYear) selectedYear = currentEntries[0].year;
 
   currentEntries.forEach(e => {
     const btn = document.createElement("button");
-    btn.textContent = e.year + " 입학자";
+    btn.textContent = `${e.year} 입학자`;
     btn.className =
       "px-3 py-1 rounded-full border text-sm " +
       (e.year === selectedYear ? "bg-indigo-600 text-white" : "bg-white text-gray-700");
 
+    // 변경내역 존재 여부 표시
     if (e.changes && e.changes.length > 0) {
       const mark = document.createElement("span");
       mark.textContent = "변경 있음";
@@ -182,12 +203,11 @@ function renderYearButtons() {
 
   renderCurriculum();
 }
-
 /* -------------------------
     교육과정 테이블 출력
 -------------------------- */
 function renderCurriculum() {
-  currentEntry = currentEntries.find(e => e.year === selectedYear);
+  currentEntry = currentEntries.find(e => same(e.year, selectedYear));
   const tbody = document.getElementById("curriculumBody");
   tbody.innerHTML = "";
 
@@ -196,22 +216,29 @@ function renderCurriculum() {
   const changes = currentEntry.changes || [];
   const changeMap = {};
 
+  // 변경내역 정규화하여 매핑
   changes.forEach(c => {
-    const key = clean(c.subject || c.afterName || c.beforeName);
-    if (!key) return;
-    if (!changeMap[key]) changeMap[key] = [];
-    changeMap[key].push(c);
+    const subjectKey = clean(c.subject || c.afterName || c.beforeName);
+    if (!subjectKey) return;
+
+    if (!changeMap[subjectKey]) changeMap[subjectKey] = [];
+    changeMap[subjectKey].push(c);
   });
 
+  // 교육과정 행 출력
   (currentEntry.data || []).forEach(row => {
     const tr = document.createElement("tr");
+
     const subjectRaw = row["교과목명"] || "";
-    const subject = clean(subjectRaw);
-    const changed = !!changeMap[subject];
+    const subjectClean = clean(subjectRaw);
+
+    const changed = !!changeMap[subjectClean];
 
     const cells = [
-      row["개설학년"], row["개설학기"], subjectRaw, row["학점"], row["총시수"],
-      row["이론시수"], row["실습시수"], row["실험시수"], row["실기시수"], row["비고"]
+      row["개설학년"], row["개설학기"], subjectRaw,
+      row["학점"], row["총시수"], row["이론시수"],
+      row["실습시수"], row["실험시수"], row["실기시수"],
+      row["비고"]
     ];
 
     cells.forEach((v, idx) => {
@@ -219,9 +246,15 @@ function renderCurriculum() {
       td.className = "border px-2 py-1 whitespace-nowrap";
 
       if (idx === 2 && changed) {
-        td.innerHTML =
-          `<button class="bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full"
-            onclick="openChangePanel('${subject.replace(/'/g, "\'")}')">${v} 변경내역</button>`;
+        // 변경 버튼
+        td.innerHTML = `
+          <button
+            class="bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full"
+            onclick="openChangePanel('${subjectClean.replace(/'/g, "\\'")}')"
+          >
+            ${v} 변경내역
+          </button>
+        `;
       } else {
         td.textContent = v || "";
       }
@@ -233,171 +266,3 @@ function renderCurriculum() {
     tbody.appendChild(tr);
   });
 }
-
-/* -------------------------
-    정렬 기능
--------------------------- */
-function sortTable(colIndex) {
-  if (!currentEntry) return;
-
-  const current = sortState[colIndex] || "asc";
-  const next = current === "asc" ? "desc" : "asc";
-  sortState[colIndex] = next;
-
-  const keys = [
-    "개설학년","개설학기","교과목명","학점","총시수",
-    "이론시수","실습시수","실험시수","실기시수","비고"
-  ];
-
-  const key = keys[colIndex];
-
-  currentEntry.data.sort((a, b) => {
-    let v1 = a[key] ?? "";
-    let v2 = b[key] ?? "";
-
-    const num1 = parseFloat(v1);
-    const num2 = parseFloat(v2);
-
-    if (!isNaN(num1) && !isNaN(num2)) {
-      return next === "asc" ? num1 - num2 : num2 - num1;
-    }
-
-    v1 = v1.toString();
-    v2 = v2.toString();
-    return next === "asc"
-      ? v1.localeCompare(v2)
-      : v2.localeCompare(v1);
-  });
-
-  renderCurriculum();
-}
-
-/* -------------------------
-    변경내역 패널
--------------------------- */
-function openChangePanel(subjectKey) {
-  const normSubject = clean(subjectKey);
-
-  const entries = (currentEntry.changes || []).filter(c => {
-    const s = clean(c.subject);
-    const b = clean(c.beforeName);
-    const a = clean(c.afterName);
-    return s === normSubject || b === normSubject || a === normSubject;
-  });
-
-  const content = document.getElementById("changeContent");
-  content.innerHTML = `<h4 class="font-semibold mb-3">교과목: ${subjectKey}</h4>`;
-
-  entries.forEach(ch => {
-    // 변경 종류 라벨
-    let typeLabel = "";
-    if (ch.type === "추가" || ch.type === "추가됨") {
-      typeLabel = `<p class="text-green-700 font-semibold mb-2">🆕 신규 개설</p>`;
-    } else if (ch.type === "삭제됨") {
-      typeLabel = `<p class="text-red-700 font-semibold mb-2">❌ 삭제됨</p>`;
-    } else if (ch.type === "변경" || ch.type === "변경됨") {
-      typeLabel = `<p class="text-amber-700 font-semibold mb-2">✏️ 내용 변경</p>`;
-    }
-
-    // 상세 변경 테이블 생성
-    let detailHTML = "";
-    if (ch.detail && Object.keys(ch.detail).length > 0) {
-      detailHTML += `
-        <table class="text-xs w-full border mb-3">
-          <thead>
-            <tr class="bg-gray-100">
-              <th class="border px-1 py-0.5">항목</th>
-              <th class="border px-1 py-0.5">변경 전</th>
-              <th class="border px-1 py-0.5">변경 후</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-      Object.keys(ch.detail).forEach(k => {
-        detailHTML += `
-          <tr>
-            <td class="border px-1 py-0.5">${k}</td>
-            <td class="border px-1 py-0.5">${ch.detail[k].before || ""}</td>
-            <td class="border px-1 py-0.5">${ch.detail[k].after || ""}</td>
-          </tr>
-        `;
-      });
-      detailHTML += `</tbody></table>`;
-    }
-
-    // 출력
-    content.innerHTML += `
-      <div class="mb-4 pb-4 border-b">
-        ${typeLabel}
-
-        ${detailHTML}
-
-        <p class="text-xs text-gray-600 mt-2">📄 변경사유:</p>
-        <p class="text-xs mb-2">${ch.reason || "사유 미작성"}</p>
-
-        <p class="text-xs text-gray-500">문서번호: ${ch.changeDocNum || "-"}</p>
-        <p class="text-xs text-gray-500">회의일: ${ch.changeDate || "-"}</p>
-      </div>
-    `;
-  });
-
-  document.getElementById("overlay").classList.remove("hidden");
-  document.getElementById("changePanel").classList.remove("translate-x-full");
-  document.getElementById("overlay").onclick = closeChangePanel;
-}
-
-function closeChangePanel() {
-  document.getElementById("overlay").classList.add("hidden");
-  document.getElementById("changePanel").classList.add("translate-x-full");
-}
-
-/* -------------------------
-    엑셀 다운로드
--------------------------- */
-function downloadExcel() {
-  if (!currentEntry) {
-    alert("다운로드할 교육과정이 없습니다.");
-    return;
-  }
-
-  const wb = XLSX.utils.book_new();
-
-  const rows = [
-    ["학과명", currentEntry.dept],
-    ["입학년도", currentEntry.year],
-    ["문서번호", currentEntry.docNum],
-    ["수정문서번호", currentEntry.revDocNum || ""],
-    ["교육과정위원회 확정여부", currentEntry.approved ? "확정" : "미확정"],
-    ["교육과정위원회 개최일", currentEntry.meetingDate || ""],
-    [],
-    [
-      "개설학년","개설학기","교과목명","수준","이수구분",
-      "학점","총시수","이론시수","실습시수","실험시수","실기시수","비고"
-    ]
-  ];
-
-  (currentEntry.data || []).forEach(r => {
-    rows.push([
-      r["개설학년"], r["개설학기"], r["교과목명"], r["수준"], r["이수구분"],
-      r["학점"], r["총시수"], r["이론시수"], r["실습시수"], r["실험시수"], r["실기시수"], r["비고"]
-    ]);
-  });
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  XLSX.utils.book_append_sheet(wb, ws, "교육과정");
-
-  const filename = `${currentEntry.dept}_${currentEntry.year}_입학자교육과정.xlsx`;
-  XLSX.writeFile(wb, filename);
-}
-
-/* -------------------------
-    초기 로딩
--------------------------- */
-document.addEventListener("DOMContentLoaded", () => {
-  initTrackButtons();
-  loadEntries();
-});
-</script>
-
-</body>
-</html>
