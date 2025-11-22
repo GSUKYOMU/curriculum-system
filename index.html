@@ -59,7 +59,7 @@
 
   <!-- ------------ 업로드 기록 테이블 ------------ -->
   <div class="max-w-4xl mx-auto bg-white p-6 mt-8 rounded-xl shadow">
-    <h2 class="text-2xl font-semibold mb-4">업로드 기록 (입학자 교육과정 템플릿)</h2>
+    <h2 class="text-2xl font-semibold mb-4">업로드 기록 (교육과정 템플릿 · 변경사유서)</h2>
 
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm border">
@@ -68,6 +68,7 @@
             <th class="border px-2 py-1">학과</th>
             <th class="border px-2 py-1">입학년도</th>
             <th class="border px-2 py-1">문서번호</th>
+            <th class="border px-2 py-1">구분</th>
             <th class="border px-2 py-1">업로드일</th>
             <th class="border px-2 py-1">삭제</th>
           </tr>
@@ -76,8 +77,9 @@
       </table>
     </div>
     <p class="mt-2 text-xs text-gray-500">
-      * 변경사유서 업로드는 별도 기록 없이, 해당 학과·해당 연도의 최신 교육과정에 직접 반영됩니다.<br>
-      * 변경사유서에 기존 과목이 없으면, 자동으로 <b>신규 과목</b>으로 추가됩니다.
+      * <b>교육과정 템플릿</b>과 <b>변경사유서(과목별)</b> 업로드 이력이 모두 기록됩니다.<br>
+      * 삭제 기능은 <b>교육과정 템플릿</b>의 경우 해당 연도의 교육과정 데이터를 함께 삭제하며,<br>
+      &nbsp;&nbsp;&nbsp; <b>변경사유서</b>의 경우에는 업로드 기록만 삭제되고, 이미 반영된 교육과정 변경 내용은 유지됩니다.
     </p>
   </div>
 
@@ -99,6 +101,7 @@ const TOP_DEPTS = [
 ];
 
 const STORAGE_KEY = "curriculumData";
+const LOG_STORAGE_KEY = "curriculumUploadLogs";
 
 /* ---------------------------
    저장/불러오기
@@ -113,6 +116,18 @@ function getData() {
 
 function saveData(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function getLogs() {
+  try {
+    return JSON.parse(localStorage.getItem(LOG_STORAGE_KEY) || "[]");
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLogs(logs) {
+  localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(logs));
 }
 
 /* ---------------------------
@@ -208,8 +223,18 @@ function processCurriculumSheet(sh) {
   // 같은 학과·문서번호 기존 데이터 제거 후 추가
   all = all.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
   all.push(entry);
-
   saveData(all);
+
+  // 업로드 로그 추가 (교육과정 템플릿)
+  let logs = getLogs();
+  logs.push({
+    dept: meta.dept,
+    year: meta.year,
+    docNum: meta.docNum,
+    kind: "교육과정",
+    uploadDate: new Date().toISOString()
+  });
+  saveLogs(logs);
 
   alert("입학자 교육과정 업로드 완료!");
   renderDeptList();
@@ -392,11 +417,25 @@ function processChangeSheet(sh) {
 
   saveData(all);
 
+  // 업로드 로그 추가 (변경사유서)
+  let logs = getLogs();
+  const yearsStr = Array.from(yearsSet).join(", ");
+  logs.push({
+    dept,
+    year: yearsStr,
+    docNum: docNum || "",
+    kind: "변경사유서",
+    uploadDate: new Date().toISOString()
+  });
+  saveLogs(logs);
+
   let msg = `변경사유서 적용 완료: ${appliedCount}개 과목 반영`;
   if (notFound.length) {
     msg += `\n\n다음 과목은 반영하지 못했습니다:\n- ` + notFound.join("\n- ");
   }
   alert(msg);
+
+  renderUploadHistory();
 }
 
 /* ---------------------------
@@ -408,7 +447,7 @@ function compare(prev, next) {
   const nextMap = {};
 
   prev.forEach(i => { if (i["교과목명"]) prevMap[i["교과목명"]] = i; });
-  next.forEach(i => { if (i["교과목명"]) nextMap[i["교과목명"]] = i; });
+  next.forEach	i => { if (i["교과목명"]) nextMap[i["교과목명"]] = i; });
 
   // 추가 및 변경
   Object.keys(nextMap).forEach(subj => {
@@ -461,26 +500,26 @@ function renderDeptList() {
 }
 
 /* ---------------------------
-   업로드 기록 렌더링
+   업로드 기록 렌더링 (교육과정 + 변경사유서)
 --------------------------- */
 function renderUploadHistory() {
-  const all = getData()
-    .filter(e => e.data) // 교육과정 템플릿 업로드만
+  const logs = getLogs()
     .sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
 
   const tbody = document.getElementById("uploadHistory");
   tbody.innerHTML = "";
 
-  all.forEach((e) => {
+  logs.forEach((e, idx) => {
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
-      <td class="border px-2 py-1">${e.dept}</td>
-      <td class="border px-2 py-1">${e.year}</td>
-      <td class="border px-2 py-1">${e.docNum}</td>
-      <td class="border px-2 py-1">${new Date(e.uploadDate).toLocaleString()}</td>
+      <td class="border px-2 py-1">${e.dept || ""}</td>
+      <td class="border px-2 py-1">${e.year || ""}</td>
+      <td class="border px-2 py-1">${e.docNum || ""}</td>
+      <td class="border px-2 py-1">${e.kind || ""}</td>
+      <td class="border px-2 py-1">${e.uploadDate ? new Date(e.uploadDate).toLocaleString() : ""}</td>
       <td class="border px-2 py-1 text-center">
-        <button onclick="deleteEntry('${e.dept}','${e.year}','${e.docNum}')"
+        <button onclick="deleteEntry(${idx})"
                 class="text-red-600 hover:text-red-800 text-sm">
           🗑 삭제
         </button>
@@ -492,14 +531,31 @@ function renderUploadHistory() {
 }
 
 /* ---------------------------
-   업로드 기록 개별 삭제
+   업로드 기록 삭제
+   - 교육과정 템플릿 로그 삭제 시: curriculumData에서도 해당 데이터 삭제
+   - 변경사유서 로그 삭제 시: 로그만 삭제, 데이터는 유지
 --------------------------- */
-function deleteEntry(dept, year, docNum) {
-  if (!confirm("해당 업로드 기록과 교육과정 데이터를 삭제하시겠습니까?")) return;
+function deleteEntry(logIndex) {
+  const logs = getLogs();
+  const target = logs[logIndex];
+  if (!target) return;
 
-  let all = getData();
-  all = all.filter(e => !(e.dept === dept && String(e.year) === String(year) && e.docNum === docNum));
-  saveData(all);
+  const msg = target.kind === "교육과정"
+    ? "해당 업로드 기록과 교육과정 데이터를 함께 삭제하시겠습니까?"
+    : "해당 업로드 기록을 삭제하시겠습니까? (이미 반영된 교육과정 변경 내용은 유지됩니다.)";
+
+  if (!confirm(msg)) return;
+
+  // 교육과정 템플릿인 경우 curriculumData에서도 삭제
+  if (target.kind === "교육과정") {
+    let all = getData();
+    all = all.filter(e => !(e.dept === target.dept && String(e.year) === String(target.year) && e.docNum === target.docNum));
+    saveData(all);
+  }
+
+  // 로그에서 제거
+  logs.splice(logIndex, 1);
+  saveLogs(logs);
 
   renderUploadHistory();
 }
