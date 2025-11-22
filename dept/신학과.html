@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>1신학과 입학자 교육과정 (조회 전용)</title>
+  <title>신학과 입학자 교육과정 (조회 전용)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <style>.strike-delete{text-decoration:line-through;color:#d00000;font-weight:bold;}</style>
@@ -253,10 +253,10 @@ function downloadExcel(){
 }
 
 document.addEventListener("DOMContentLoaded",()=>{
-  const dept=document.title.replace(" 1신학과 입학자 교육과정 (조회 전용)","");
+  const dept=document.title.replace(" 신학과 입학자 교육과정 (조회 전용)","");
   DEPT_NAME=dept;
   selectedTrack=dept;
-  document.getElementById("deptTitle").textContent=dept+" 1신학과 입학자 교육과정 (조회 전용)";
+  document.getElementById("deptTitle").textContent=dept+" 신학과 입학자 교육과정 (조회 전용)";
   initTrackButtons();
   loadEntries();
 });
