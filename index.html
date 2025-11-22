@@ -14,6 +14,7 @@
 
 <body class="bg-gray-100 min-h-screen p-6">
 
+  <!-- ------------ 업로드 박스 -------------- -->
   <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
     <h1 class="text-3xl font-bold mb-6 text-center">입학자 교육과정 업로드</h1>
 
@@ -24,7 +25,7 @@
       📥 입학자교육과정 업로드 템플릿 다운로드
     </a>
 
-    <!-- 업로드 -->
+    <!-- 파일 업로드 -->
     <input id="fileInput" type="file"
            accept=".xlsx,.xls"
            class="border p-3 rounded w-full mb-4"/>
@@ -33,17 +34,47 @@
             class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
       업로드
     </button>
+
+    <!-- 전체 초기화 버튼 -->
+    <button onclick="resetStorage()"
+            class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 mt-3">
+      🔄 전체 초기화
+    </button>
   </div>
 
+
+  <!-- ------------ 학과 리스트 ------------ -->
   <div class="max-w-4xl mx-auto bg-white p-6 mt-8 rounded-xl shadow">
     <h2 class="text-2xl font-semibold mb-4">학과별 교육과정 보기</h2>
     <ul id="deptList" class="grid grid-cols-1 md:grid-cols-2 gap-3"></ul>
   </div>
 
 
+  <!-- ------------ 업로드 기록 테이블 ------------ -->
+  <div class="max-w-4xl mx-auto bg-white p-6 mt-8 rounded-xl shadow">
+    <h2 class="text-2xl font-semibold mb-4">업로드 기록</h2>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm border">
+        <thead class="bg-gray-100">
+          <tr>
+            <th class="border px-2 py-1">학과</th>
+            <th class="border px-2 py-1">입학년도</th>
+            <th class="border px-2 py-1">문서번호</th>
+            <th class="border px-2 py-1">업로드일</th>
+            <th class="border px-2 py-1">삭제</th>
+          </tr>
+        </thead>
+        <tbody id="uploadHistory"></tbody>
+      </table>
+    </div>
+  </div>
+
+
+
 <script>
 /* ---------------------------
-   설정값
+   학과 순서
 --------------------------- */
 const TOP_DEPTS = [
   "신학과",
@@ -58,8 +89,9 @@ const TOP_DEPTS = [
 
 const STORAGE_KEY = "curriculumData";
 
+
 /* ---------------------------
-   저장소 관련 함수
+   저장/불러오기
 --------------------------- */
 function getData(){
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
@@ -69,6 +101,7 @@ function getData(){
 function saveData(data){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
+
 
 /* ---------------------------
    업로드 처리
@@ -81,6 +114,7 @@ function handleUpload(){
   }
 
   const reader = new FileReader();
+
   reader.onload = e => {
     const wb = XLSX.read(e.target.result, { type: "binary" });
 
@@ -92,6 +126,7 @@ function handleUpload(){
 
     const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
 
+
     /* -------- 메타데이터 -------- */
     const meta = {
       dept: (rows[0][1] || "").toString().trim(),
@@ -102,7 +137,7 @@ function handleUpload(){
       meetingDate: (rows[5][1] || "").toString().trim()
     };
 
-    // ⭐ 숫자로 들어온 입학년도 자동 변환
+    // 숫자 → 문자열 자동 변환
     meta.year = String(meta.year).trim();
 
     if(!meta.dept || !meta.year || !meta.docNum){
@@ -110,7 +145,8 @@ function handleUpload(){
       return;
     }
 
-    /* -------- 교육과정 표 범위 찾기 -------- */
+
+    /* -------- 표 범위 찾기 -------- */
     let start = -1;
     for(let i=0; i<rows.length; i++){
       if(rows[i][0] === "개설학년"){
@@ -125,6 +161,7 @@ function handleUpload(){
     }
 
     const headers = rows[start];
+
     const dataRows = rows
       .slice(start + 1)
       .filter(r => r.some(c => c !== undefined && c !== null && c !== ""));
@@ -134,6 +171,7 @@ function handleUpload(){
       headers.forEach((h, i) => obj[h] = r[i] ?? "");
       return obj;
     });
+
 
     /* -------- 변경내역 비교 -------- */
     let all = getData();
@@ -145,6 +183,7 @@ function handleUpload(){
 
     const changes = prev ? compare(prev.data, curriculum) : null;
 
+
     /* -------- 저장 -------- */
     const entry = {
       ...meta,
@@ -153,7 +192,7 @@ function handleUpload(){
       uploadDate: new Date().toISOString()
     };
 
-    // 동일 문서번호 삭제 후 새 버전 삽입
+    // 동일 문서번호 삭제 후 덮어쓰기
     all = all.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
     all.push(entry);
 
@@ -161,21 +200,25 @@ function handleUpload(){
 
     alert("업로드 완료!");
     renderDeptList();
+    renderUploadHistory();
   };
 
   reader.readAsBinaryString(file);
 }
 
+
 /* ---------------------------
-   변경내역 비교 함수
+   변경내역 비교
 --------------------------- */
 function compare(prev, next){
   const changes = [];
-  const prevMap = {}, nextMap = {};
+  const prevMap = {};
+  const nextMap = {};
 
   prev.forEach(i => { if(i["교과목명"]) prevMap[i["교과목명"]] = i; });
   next.forEach(i => { if(i["교과목명"]) nextMap[i["교과목명"]] = i; });
 
+  // 추가됨
   Object.keys(nextMap).forEach(subj => {
     if(!prevMap[subj]){
       changes.push({ type:"추가됨", subject: subj, after: nextMap[subj] });
@@ -183,16 +226,19 @@ function compare(prev, next){
       const diff = {};
       const a = nextMap[subj];
       const b = prevMap[subj];
+
       Object.keys(a).forEach(k => {
         if((a[k] || "") !== (b[k] || "")){
           diff[k] = { before: b[k] || "", after: a[k] || "" };
         }
       });
+
       if(Object.keys(diff).length > 0)
         changes.push({ type:"변경됨", subject: subj, detail: diff });
     }
   });
 
+  // 삭제됨
   Object.keys(prevMap).forEach(subj => {
     if(!nextMap[subj]){
       changes.push({ type:"삭제됨", subject: subj, before: prevMap[subj] });
@@ -201,6 +247,7 @@ function compare(prev, next){
 
   return changes;
 }
+
 
 /* ---------------------------
    학과 리스트 렌더링
@@ -221,8 +268,65 @@ function renderDeptList(){
   });
 }
 
+
+/* ---------------------------
+   업로드 기록 렌더링
+--------------------------- */
+function renderUploadHistory(){
+  const all = getData().sort((a,b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+  const tbody = document.getElementById("uploadHistory");
+
+  tbody.innerHTML = "";
+
+  all.forEach((e, idx) => {
+    const tr = document.createElement("tr");
+
+    tr.innerHTML = `
+      <td class="border px-2 py-1">${e.dept}</td>
+      <td class="border px-2 py-1">${e.year}</td>
+      <td class="border px-2 py-1">${e.docNum}</td>
+      <td class="border px-2 py-1">${new Date(e.uploadDate).toLocaleString()}</td>
+      <td class="border px-2 py-1 text-center">
+        <button onclick="deleteEntry(${idx})"
+                class="text-red-600 hover:text-red-800 text-sm">
+          🗑 삭제
+        </button>
+      </td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+}
+
+
+/* ---------------------------
+   업로드 기록 개별 삭제
+--------------------------- */
+function deleteEntry(index){
+  if(confirm("해당 업로드 기록을 삭제하시겠습니까?")){
+    let all = getData();
+    all.splice(index, 1);
+    saveData(all);
+    renderUploadHistory();
+  }
+}
+
+
+/* ---------------------------
+   전체 초기화
+--------------------------- */
+function resetStorage(){
+  if(confirm("정말 전체 데이터를 초기화하시겠습니까?\n(모든 업로드 기록이 삭제됩니다)")){
+    localStorage.removeItem("curriculumData");
+    alert("초기화 완료! 페이지를 새로고침합니다.");
+    location.reload();
+  }
+}
+
+
 /* 초기 실행 */
 renderDeptList();
+renderUploadHistory();
 
 </script>
 
