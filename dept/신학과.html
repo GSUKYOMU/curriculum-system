@@ -6,6 +6,7 @@
   <title>신학과 입학자 교육과정 (조회 전용)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
   <style>
     .strike-delete {
       text-decoration: line-through;
@@ -17,6 +18,9 @@
 
 <body class="bg-gray-100 min-h-screen">
 
+<!-- ===========================
+      HEADER
+=========================== -->
 <div class="max-w-6xl mx-auto py-8 px-4">
   <a href="../index.html" class="text-blue-600 text-sm">← 메인으로</a>
   <h1 class="text-3xl font-bold mt-2 mb-4">신학과 입학자 교육과정 (조회 전용)</h1>
@@ -25,22 +29,31 @@
     <p class="text-gray-700">조회 전용 학과 페이지입니다. 데이터 업로드는 index.html에서 진행됩니다.</p>
   </div>
 
+  <!-- ===========================
+        TRACK SELECTION
+  =========================== -->
   <div class="bg-white rounded-xl shadow p-4 mb-6">
     <h2 class="text-xl font-semibold mb-3">과정 선택</h2>
     <div id="trackButtons" class="flex flex-wrap gap-2"></div>
   </div>
 
+  <!-- ===========================
+        YEAR / TABLE
+  =========================== -->
   <div class="bg-white rounded-xl shadow p-4">
     <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2">
       <h2 class="text-xl font-semibold">입학년도별 최종 교육과정</h2>
       <div id="yearButtons" class="flex flex-wrap gap-2 text-sm"></div>
     </div>
 
-    <button onclick="downloadExcel()" class="bg-green-600 text-white px-4 py-2 rounded mb-4 text-sm">
+    <button onclick="downloadExcel()"
+      class="bg-green-600 text-white px-4 py-2 rounded mb-4 text-sm">
       📥 현재 교육과정 엑셀 다운로드
     </button>
 
-    <div id="noData" class="text-gray-500 text-sm hidden">해당 학과의 교육과정이 없습니다.</div>
+    <div id="noData" class="text-gray-500 text-sm hidden">
+      해당 학과의 교육과정이 없습니다.
+    </div>
 
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm border">
@@ -64,9 +77,12 @@
   </div>
 </div>
 
-<!-- 변경 패널 -->
+<!-- ===========================
+      CHANGE PANEL
+=========================== -->
 <div id="overlay" class="fixed inset-0 bg-black bg-opacity-30 hidden"></div>
-<div id="changePanel" class="fixed top-0 right-0 h-full w-full md:w-1/3 bg-white shadow-xl transform translate-x-full transition-transform duration-200">
+<div id="changePanel"
+     class="fixed top-0 right-0 h-full w-full md:w-1/3 bg-white shadow-xl transform translate-x-full transition-transform duration-200">
   <div class="p-4 border-b flex items-center justify-between">
     <h3 class="text-lg font-semibold">변경 내역</h3>
     <button onclick="closeChangePanel()" class="text-sm text-gray-500">닫기</button>
@@ -74,17 +90,23 @@
   <div id="changeContent" class="p-4 text-sm overflow-y-auto"></div>
 </div>
 
+
+<!-- ===========================
+      MAIN SCRIPT
+=========================== -->
 <script>
-/* ============================
-   공통 유틸
-============================ */
 const STORAGE_KEY = "curriculumData";
 const TRACKS = ["신학과"];
+
 let selectedTrack = TRACKS[0];
 let selectedYear = null;
 let currentEntries = [];
 let currentEntry = null;
 
+
+/* ===========================
+      UTIL FUNCTIONS
+=========================== */
 function clean(v) {
   return (v || "").toString().normalize("NFKC").replace(/\s+/g, " ").trim();
 }
@@ -93,39 +115,46 @@ function same(a, b) {
 }
 function getData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
-  catch (e) { return []; }
+  catch { return []; }
 }
 
-/* ============================
-   과정 버튼
-============================ */
+
+/* ===========================
+      TRACK BUTTONS
+=========================== */
 function initTrackButtons() {
   const c = document.getElementById("trackButtons");
   c.innerHTML = "";
+
   TRACKS.forEach(t => {
     let btn = document.createElement("button");
     btn.textContent = t;
     btn.className =
       "px-3 py-1 rounded-full border text-sm " +
       (t === selectedTrack ? "bg-blue-600 text-white" : "bg-white text-gray-700");
+
     btn.onclick = () => {
       selectedTrack = t;
       selectedYear = null;
       loadEntries();
       initTrackButtons();
     };
+
     c.appendChild(btn);
   });
 }
 
-/* ============================
-   학과 데이터 불러오기
-============================ */
+
+/* ===========================
+      LOAD DATA FOR DEPT
+=========================== */
 function loadEntries() {
   const all = getData();
-  const filtered = all.filter(d => d.dept === selectedTrack);
 
+  // 최신업로드 기준 병합
+  const filtered = all.filter(d => d.dept === selectedTrack);
   const map = {};
+
   filtered.forEach(e => {
     if (!map[e.year] || map[e.year].uploadDate < e.uploadDate) {
       map[e.year] = e;
@@ -139,9 +168,10 @@ function loadEntries() {
   renderYearButtons();
 }
 
-/* ============================
-   입학년도 버튼
-============================ */
+
+/* ===========================
+      YEAR BUTTON RENDER
+=========================== */
 function renderYearButtons() {
   const c = document.getElementById("yearButtons");
   c.innerHTML = "";
@@ -150,6 +180,7 @@ function renderYearButtons() {
     document.getElementById("noData").classList.remove("hidden");
     return;
   }
+
   document.getElementById("noData").classList.add("hidden");
 
   if (!selectedYear) selectedYear = currentEntries[0].year;
@@ -157,24 +188,29 @@ function renderYearButtons() {
   currentEntries.forEach(e => {
     let btn = document.createElement("button");
     btn.textContent = e.year + " 입학자";
+
     btn.className =
       "px-3 py-1 rounded-full border text-sm " +
       (e.year === selectedYear ? "bg-indigo-600 text-white" : "bg-white text-gray-700");
+
     btn.onclick = () => {
       selectedYear = e.year;
       renderYearButtons();
     };
+
     c.appendChild(btn);
   });
 
   renderCurriculum();
 }
 
-/* ============================
-   변경내역 매핑
-============================ */
+
+/* ===========================
+      CHANGE MAP
+=========================== */
 function buildChangeMap(changes) {
   const map = {};
+
   (changes || []).forEach(ch => {
     [clean(ch.subject), clean(ch.beforeName), clean(ch.afterName)]
       .filter(k => k)
@@ -183,22 +219,25 @@ function buildChangeMap(changes) {
         map[k].push(ch);
       });
   });
+
   return map;
 }
 
-/* ============================
-   교육과정 출력 + 삭제과목 표시
-============================ */
+
+/* ===========================
+      RENDER TABLE
+=========================== */
 function renderCurriculum() {
   currentEntry = currentEntries.find(e => e.year === selectedYear);
   const tbody = document.getElementById("curriculumBody");
   tbody.innerHTML = "";
+
   if (!currentEntry) return;
 
   const changes = currentEntry.changes || [];
   const changeMap = buildChangeMap(changes);
 
-  /* 정상 과목 표시 */
+  /* ----- 정상 과목 출력 ----- */
   (currentEntry.data || []).forEach(row => {
     let subject = clean(row["교과목명"]);
     let changed = !!changeMap[subject];
@@ -211,22 +250,19 @@ function renderCurriculum() {
     ];
 
     fields.forEach(key => {
-      let v = row[key] || "";
       let td = document.createElement("td");
       td.className = "border px-2 py-1 whitespace-nowrap";
+      let val = row[key] ?? "";
 
-      if (key === "교과목명") {
-        if (changed) {
-          td.innerHTML = `
-            <button class='bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full'
-                    onclick='openChangePanel("${subject}")'>
-              ${v} 변경내역
-            </button>`;
-        } else {
-          td.textContent = v;
-        }
+      if (key === "교과목명" && changed) {
+        td.innerHTML = `
+          <button class="bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full"
+            onclick='openChangePanel("${subject}")'>
+            ${val} 변경내역
+          </button>
+        `;
       } else {
-        td.textContent = v;
+        td.textContent = val;
       }
 
       tr.appendChild(td);
@@ -236,20 +272,35 @@ function renderCurriculum() {
     tbody.appendChild(tr);
   });
 
-  /* 삭제된 과목 자동 표시 */
-  const existing = new Set(
+
+  /* ----- 삭제된 과목 출력 (중복 제거) ----- */
+  const existingSubjects = new Set(
     (currentEntry.data || []).map(r => clean(r["교과목명"]))
   );
 
+  const deletedShown = new Set();  // 중복 방지
+
   (currentEntry.changes || []).forEach(ch => {
-    const names = [clean(ch.subject), clean(ch.beforeName), clean(ch.afterName)];
+    const names = [
+      clean(ch.subject),
+      clean(ch.beforeName),
+      clean(ch.afterName)
+    ];
+
     const subjectName = names.find(n => n) || "";
 
-    if (!existing.has(subjectName) && (ch.type === "삭제" || ch.type === "삭제됨")) {
-      const tr = document.createElement("tr");
+    if (deletedShown.has(subjectName)) return;
+
+    if (
+      !existingSubjects.has(subjectName) &&
+      (ch.type === "삭제" || ch.type === "삭제됨")
+    ) {
+      deletedShown.add(subjectName);
+
+      let tr = document.createElement("tr");
       tr.className = "bg-red-50 text-red-700";
 
-      const td = document.createElement("td");
+      let td = document.createElement("td");
       td.colSpan = 10;
       td.className = "border px-2 py-1";
 
@@ -267,11 +318,13 @@ function renderCurriculum() {
   });
 }
 
-/* ============================
-   변경 패널
-============================ */
+
+/* ===========================
+      CHANGE PANEL
+=========================== */
 function openChangePanel(subjectKey) {
   const norm = clean(subjectKey);
+
   const entries = (currentEntry.changes || []).filter(ch =>
     same(ch.subject, norm) ||
     same(ch.beforeName, norm) ||
@@ -279,16 +332,19 @@ function openChangePanel(subjectKey) {
   );
 
   const content = document.getElementById("changeContent");
-  content.innerHTML = `<h4 class='font-semibold mb-3'>교과목: ${subjectKey}</h4>`;
+
+  content.innerHTML =
+    `<h4 class='font-semibold mb-3'>교과목: ${subjectKey}</h4>`;
 
   entries.forEach(ch => {
     content.innerHTML += `
-      <div class='mb-4 pb-4 border-b'>
-        <p class='font-semibold mb-1'>변경 유형: ${ch.type}</p>
-        <p class='text-sm text-gray-700 mb-1'>사유: ${ch.reason || "-"}</p>
-        <p class='text-xs text-gray-500'>문서번호: ${ch.changeDocNum || "-"}</p>
-        <p class='text-xs text-gray-500'>회의일: ${ch.changeDate || "-"}</p>
-      </div>`;
+      <div class="mb-4 pb-4 border-b">
+        <p class="font-semibold mb-1">변경유형: ${ch.type}</p>
+        <p class="text-sm">사유: ${ch.reason || "-"}</p>
+        <p class="text-xs text-gray-500">문서번호: ${ch.changeDocNum || "-"}</p>
+        <p class="text-xs text-gray-500">회의일: ${ch.changeDate || "-"}</p>
+      </div>
+    `;
   });
 
   document.getElementById("overlay").classList.remove("hidden");
@@ -299,9 +355,10 @@ function closeChangePanel() {
   document.getElementById("changePanel").classList.add("translate-x-full");
 }
 
-/* ============================
-   엑셀 다운로드
-============================ */
+
+/* ===========================
+      DOWNLOAD EXCEL
+=========================== */
 function downloadExcel() {
   if (!currentEntry) {
     alert("다운로드할 교육과정이 없습니다.");
@@ -313,14 +370,16 @@ function downloadExcel() {
     ["학과명", selectedTrack],
     ["입학년도", selectedYear],
     [],
-    ["개설학년","개설학기","교과목명","학점","총시수","이론","실습","실험","실기","비고"]
+    ["개설학년","개설학기","교과목명","학점","총시수",
+     "이론","실습","실험","실기","비고"]
   ];
 
   (currentEntry.data || []).forEach(r => {
     rows.push([
-      r["개설학년"], r["개설학기"], r["교과목명"], r["학점"],
-      r["총시수"], r["이론시수"], r["실습시수"],
-      r["실험시수"], r["실기시수"], r["비고"]
+      r["개설학년"], r["개설학기"], r["교과목명"],
+      r["학점"], r["총시수"], r["이론시수"],
+      r["실습시수"], r["실험시수"], r["실기시수"],
+      r["비고"]
     ]);
   });
 
@@ -329,13 +388,15 @@ function downloadExcel() {
   XLSX.writeFile(wb, `${selectedTrack}_${selectedYear}.xlsx`);
 }
 
-/* ============================
-   초기 실행
-============================ */
+
+/* ===========================
+      INIT
+=========================== */
 document.addEventListener("DOMContentLoaded", () => {
   initTrackButtons();
   loadEntries();
 });
 </script>
+
 </body>
 </html>
