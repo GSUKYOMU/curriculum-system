@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>입학자 교육과정 관리 시스템</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+</head>
+<body class='p-6 bg-gray-100'>
+
+<h1 class='text-3xl font-bold mb-4 text-center'>입학자 교육과정 업로드</h1>
+
+<div class='bg-white p-4 rounded shadow max-w-3xl mx-auto'>
+  <a href="./입학자교육과정 업로드 템플릿.xlsx" download class='px-3 py-2 bg-green-600 text-white rounded'>📥 업로드 템플릿</a>
+  <a href="./입학자교육과정 변경사유서.xlsx" download class='px-3 py-2 bg-amber-600 text-white rounded'>📥 변경사유서</a>
+
+  <input id="fileInput" type="file" class='border p-2 rounded w-full mt-4'>
+  <button onclick="handleUpload()" class='mt-2 px-4 py-2 bg-blue-600 text-white rounded'>업로드</button>
+</div>
+
+<div class='bg-white p-4 rounded shadow max-w-3xl mx-auto mt-6'>
+  <h2 class='text-xl font-bold mb-2'>학과별 교육과정 보기</h2>
+  <ul id="deptList"></ul>
+</div>
+
+<div class='bg-white p-4 rounded shadow max-w-3xl mx-auto mt-6'>
+  <h2 class='text-xl font-bold mb-2'>업로드 기록</h2>
+  <table class='w-full text-sm border'>
+    <thead><tr>
+      <th class='border px-2 py-1'>유형</th>
+      <th class='border px-2 py-1'>학과</th>
+      <th class='border px-2 py-1'>입학년도</th>
+      <th class='border px-2 py-1'>문서번호</th>
+      <th class='border px-2 py-1'>변경건수</th>
+      <th class='border px-2 py-1'>업로드일</th>
+      <th class='border px-2 py-1'>다운로드</th>
+      <th class='border px-2 py-1'>삭제</th>
+    </tr></thead>
+    <tbody id="uploadHistory"></tbody>
+  </table>
+</div>
+
+<script>
+const TOP_DEPTS=["신학과","사회복지학과","상담심리학과","G2빅데이터경영학과","실용음악학과","간호학과","식품영양학과","외국인전담학과"];
+const STORAGE_KEY="curriculumData";
+const HISTORY_KEY="uploadHistory";
+
+function getData(){ return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); }
+function saveData(v){ localStorage.setItem(STORAGE_KEY,JSON.stringify(v)); }
+function getHistory(){ return JSON.parse(localStorage.getItem(HISTORY_KEY)||"[]"); }
+function saveHistory(v){ localStorage.setItem(HISTORY_KEY,JSON.stringify(v)); }
+
+function handleUpload(){
+  const f=document.getElementById("fileInput").files[0];
+  if(!f){ alert("파일을 선택하세요"); return; }
+  const r=new FileReader();
+  r.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:"binary"});
+    if(wb.Sheets["교육과정"]) processCurriculum(wb.Sheets["교육과정"],f.name);
+    else if(wb.Sheets["변경사유서"]) processChange(wb.Sheets["변경사유서"],f.name);
+    else alert("시트 이름 오류: 교육과정 또는 변경사유서 필요");
+  };
+  r.readAsBinaryString(f);
+}
+
+function processCurriculum(sh,filename){
+  const rows=XLSX.utils.sheet_to_json(sh,{header:1});
+  const meta={
+    dept:(rows[0][1]||"").trim(),
+    year:(rows[1][1]||"").trim(),
+    docNum:(rows[2][1]||"").trim()
+  };
+  let start=rows.findIndex(r=>r[0]==="개설학년");
+  const headers=rows[start];
+  const data=rows.slice(start+1).filter(r=>r.length>0).map(r=>{
+    const o={}; headers.forEach((h,i)=>o[h]=r[i]||""); return o;
+  });
+  let all=getData();
+  all=all.filter(v=>!(v.dept===meta.dept&&v.year===meta.year&&v.docNum===meta.docNum));
+  all.push({...meta,data,uploadDate:new Date().toISOString()});
+  saveData(all);
+
+  const hist=getHistory();
+  hist.push({type:"전체 업로드",...meta,changedCount:"-",uploadDate:new Date().toISOString()});
+  saveHistory(hist);
+
+  alert("업로드 완료!");
+  renderDeptList(); renderHistory();
+}
+
+function processChange(sh,filename){
+  const rows=XLSX.utils.sheet_to_json(sh,{header:1});
+  const dept=(rows[0][1]||"").trim();
+  const docNum=(rows[3][1]||"").trim();
+  let start=rows.findIndex(r=>r[0]==="(변경할)교육과정 연도");
+  const dataRows=rows.slice(start+1).filter(r=>r.some(v=>v));
+  let all=getData();
+  let years=new Set(), applied=0;
+
+  dataRows.forEach(r=>{
+    const year=(r[0]||"").trim(); years.add(year);
+    const next={
+      grade:r[12],semester:r[13],type:r[14],name:r[15],
+      credit:r[16],total:r[17],theory:r[18],practice:r[19],skill:r[20],experiment:r[21]
+    };
+    const entry=all.filter(v=>v.dept===dept&&v.year===year).sort((a,b)=>new Date(b.uploadDate)-new Date(a.uploadDate))[0];
+    if(!entry) return;
+
+    const idx=entry.data.findIndex(v=>v["교과목명"]===next.name);
+    if(idx===-1){
+      entry.data.push({
+        "개설학년":next.grade||"",
+        "개설학기":next.semester||"",
+        "이수구분":next.type||"",
+        "교과목명":next.name||"",
+        "학점":next.credit||"",
+        "총시수":next.total||"",
+        "이론시수":next.theory||"",
+        "실습시수":next.practice||"",
+        "실기시수":next.skill||"",
+        "실험시수":next.experiment||""
+      });
+      applied++; return;
+    }
+  });
+
+  saveData(all);
+  const hist=getHistory();
+  hist.push({type:"변경",dept,year:[...years].join(", "),docNum,changedCount:applied,uploadDate:new Date().toISOString()});
+  saveHistory(hist);
+  alert("변경 적용 "+applied+"건");
+  renderHistory();
+}
+
+function renderDeptList(){
+  const ul=document.getElementById("deptList");
+  ul.innerHTML="";
+  TOP_DEPTS.forEach(d=>ul.innerHTML+=`<li class='py-2'><a href="./dept/${d}.html" class='text-blue-600'>${d}</a></li>`);
+}
+
+function renderHistory(){
+  const hist=getHistory();
+  const tb=document.getElementById("uploadHistory");
+  tb.innerHTML="";
+  hist.forEach((h,i)=>{
+    tb.innerHTML+=`
+      <tr>
+        <td class='border px-2 py-1'>${h.type}</td>
+        <td class='border px-2 py-1'>${h.dept}</td>
+        <td class='border px-2 py-1'>${h.year||"-"}</td>
+        <td class='border px-2 py-1'>${h.docNum}</td>
+        <td class='border px-2 py-1'>${h.changedCount}</td>
+        <td class='border px-2 py-1'>${new Date(h.uploadDate).toLocaleString()}</td>
+        <td class='border px-2 py-1'><button onclick='downloadHist(${i})' class='text-green-600'>📥</button></td>
+        <td class='border px-2 py-1'><button onclick='delHist(${i})' class='text-red-600'>🗑</button></td>
+      </tr>`;
+  });
+}
+
+function delHist(i){
+  const h=getHistory(); h.splice(i,1); saveHistory(h); renderHistory();
+}
+function downloadHist(i){ alert("다운로드 기능은 추후 완성 예정!"); }
+
+renderDeptList(); renderHistory();
+</script>
+
+</body></html>
