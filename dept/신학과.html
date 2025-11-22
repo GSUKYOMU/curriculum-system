@@ -153,9 +153,11 @@ function renderCurriculum(){
 else td.textContent = (v === 0 ? "0" : (v ?? ""));
 } else {
   if (isDeleted) td.classList.add("strike-delete");
-  td.textContent = (v === 0 ? "0" : (v ?? ""));
+else td.textContent = (v === 0 || v === "0" ? "0" : (v ?? ""));
+} else {
+  if (isDeleted) td.classList.add("strike-delete");
+  td.textContent = (v === 0 || v === "0" ? "0" : (v ?? ""));
 }
-
       tr.appendChild(td);
     });
 
