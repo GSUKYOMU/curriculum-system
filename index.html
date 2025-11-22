@@ -560,36 +560,6 @@ const logs = originalLogs
 
     tbody.appendChild(tr);
   });
-  }); // ← 과목 출력 forEach 끝난 자리
-
-/* -------------------------
-    삭제된 과목 자동 표시
--------------------------- */
-const existingSubjects = new Set(
-  (currentEntry.data || []).map(r => clean(r["교과목명"]))
-);
-
-(currentEntry.changes || []).forEach(ch => {
-  const names = [clean(ch.subject), clean(ch.beforeName), clean(ch.afterName)];
-  const subjectName = names.find(n => n) || "";
-
-  if (!existingSubjects.has(subjectName) && (ch.type === "삭제" || ch.type === "삭제됨")) {
-
-    const tr = document.createElement("tr");
-    tr.className = "bg-red-50 text-red-700";
-
-    const td = document.createElement("td");
-    td.colSpan = 10;
-    td.className = "border px-2 py-1";
-    td.innerHTML = `
-      ❌ <strong>${subjectName}</strong> — 폐지된 과목
-      <button class="ml-2 bg-red-100 border border-red-300 text-red-800 text-xs px-2 py-0.5 rounded-full"
-        onclick="openChangePanel('${subjectName}')">변경내역 보기</button>
-    `;
-    tr.appendChild(td);
-    tbody.appendChild(tr);
-  }
-});
 }
 
 /* ---------------------------
