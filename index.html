@@ -19,11 +19,24 @@
     <h1 class="text-3xl font-bold mb-6 text-center">입학자 교육과정 업로드</h1>
 
     <!-- 템플릿 다운로드 -->
-    <a href="./입학자교육과정%20업로드%20템플릿.xlsx"
-       download="입학자교육과정 업로드 템플릿.xlsx"
-       class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 inline-block mb-4">
-      📥 입학자교육과정 업로드 템플릿 다운로드
-    </a>
+    <div class="space-x-2 mb-4">
+      <a href="./입학자교육과정%20업로드%20템플릿.xlsx"
+         download="입학자교육과정 업로드 템플릿.xlsx"
+         class="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700 inline-block text-sm">
+        📥 입학자교육과정 업로드 템플릿
+      </a>
+
+      <a href="./입학자교육과정_변경사유서_과목별_v5.xlsx"
+         download="입학자교육과정 변경사유서.xlsx"
+         class="bg-amber-500 text-white px-3 py-2 rounded hover:bg-amber-600 inline-block text-sm">
+        📥 입학자교육과정 변경사유서
+      </a>
+    </div>
+
+    <p class="text-xs text-gray-500 mb-2">
+      · <b>교육과정 템플릿</b> 또는 <b>변경사유서(과목별)</b> 엑셀 파일을 업로드하면 자동으로 반영됩니다.<br>
+      · 교육과정 템플릿 시트 이름: <code>교육과정</code>, 변경사유서 시트 이름: <code>변경사유서</code>
+    </p>
 
     <!-- 파일 업로드 -->
     <input id="fileInput" type="file"
@@ -46,24 +59,29 @@
 
   <!-- ------------ 업로드 기록 테이블 ------------ -->
   <div class="max-w-4xl mx-auto bg-white p-6 mt-8 rounded-xl shadow">
-    <h2 class="text-2xl font-semibold mb-4">업로드 기록</h2>
+    <h2 class="text-2xl font-semibold mb-4">업로드 기록 (전체 업로드 + 변경사유서)</h2>
 
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm border">
         <thead class="bg-gray-100">
           <tr>
+            <th class="border px-2 py-1">유형</th>
             <th class="border px-2 py-1">학과</th>
             <th class="border px-2 py-1">입학년도</th>
             <th class="border px-2 py-1">문서번호</th>
+            <th class="border px-2 py-1">변경건수</th>
             <th class="border px-2 py-1">업로드일</th>
+            <th class="border px-2 py-1">다운로드</th>
             <th class="border px-2 py-1">삭제</th>
           </tr>
         </thead>
         <tbody id="uploadHistory"></tbody>
       </table>
     </div>
+        <p class="mt-2 text-xs text-gray-500">
+      ※ 전체 업로드는 “입학자교육과정 템플릿”, 변경은 “입학자교육과정 변경사유서” 업로드입니다.
+    </p>
   </div>
-
 
 
 <script>
@@ -82,23 +100,33 @@ const TOP_DEPTS = [
 ];
 
 const STORAGE_KEY = "curriculumData";
+const HISTORY_KEY = "uploadHistory";
 
 
 /* ---------------------------
    저장/불러오기
 --------------------------- */
-function getData(){
+function getData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); }
   catch(e){ return []; }
 }
 
-function saveData(data){
+function saveData(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); }
+  catch(e){ return []; }
+}
+
+function saveHistory(list) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
 }
 
 
 /* ---------------------------
-   업로드 처리
+   업로드 핸들러
 --------------------------- */
 function handleUpload(){
   const file = document.getElementById("fileInput").files[0];
@@ -112,87 +140,13 @@ function handleUpload(){
   reader.onload = e => {
     const wb = XLSX.read(e.target.result, { type: "binary" });
 
-    const sh = wb.Sheets["교육과정"];
-    if(!sh){
-      alert("시트 이름이 '교육과정'인지 확인해주세요.");
-      return;
+    if (wb.Sheets["교육과정"]) {
+      processCurriculumSheet(wb.Sheets["교육과정"], file.name);
+    } else if (wb.Sheets["변경사유서"]) {
+      processChangeSheet(wb.Sheets["변경사유서"], file.name);
+    } else {
+      alert("지원하지 않는 형식입니다.\n시트 이름이 '교육과정' 또는 '변경사유서'인지 확인해주세요.");
     }
-
-    const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
-
-
-    /* -------- 메타데이터 -------- */
-    const meta = {
-      dept: (rows[0][1] || "").toString().trim(),
-      year: (rows[1][1] || "").toString().trim(),
-      docNum: (rows[2][1] || "").toString().trim(),
-      revDocNum: (rows[3][1] || "").toString().trim(),
-      approved: (rows[4][1] || "").toString().trim() === "확정",
-      meetingDate: (rows[5][1] || "").toString().trim()
-    };
-
-    meta.year = String(meta.year).trim();
-
-    if(!meta.dept || !meta.year || !meta.docNum){
-      alert("학과명, 입학년도, 문서번호는 반드시 입력해야 합니다.");
-      return;
-    }
-
-
-    /* -------- 표 범위 찾기 -------- */
-    let start = -1;
-    for(let i=0; i<rows.length; i++){
-      if(rows[i][0] === "개설학년"){
-        start = i;
-        break;
-      }
-    }
-
-    if(start === -1){
-      alert("표 헤더(개설학년)가 없습니다.");
-      return;
-    }
-
-    const headers = rows[start];
-
-    const dataRows = rows
-      .slice(start + 1)
-      .filter(r => r.some(c => c !== undefined && c !== null && c !== ""));
-
-    const curriculum = dataRows.map(r => {
-      const obj = {};
-      headers.forEach((h, i) => obj[h] = r[i] ?? "");
-      return obj;
-    });
-
-
-    /* -------- 변경내역 비교 -------- */
-    let all = getData();
-    let prev = null;
-
-    if(meta.revDocNum){
-      prev = all.find(d => d.dept === meta.dept && d.docNum === meta.revDocNum);
-    }
-
-    const changes = prev ? compare(prev.data, curriculum) : null;
-
-
-    /* -------- 저장 -------- */
-    const entry = {
-      ...meta,
-      data: curriculum,
-      changes,
-      uploadDate: new Date().toISOString()
-    };
-
-    all = all.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
-    all.push(entry);
-
-    saveData(all);
-
-    alert("업로드 완료!");
-    renderDeptList();
-    renderUploadHistory();
   };
 
   reader.readAsBinaryString(file);
@@ -200,7 +154,227 @@ function handleUpload(){
 
 
 /* ---------------------------
-   변경내역 비교
+   1) 전체 업로드 처리
+--------------------------- */
+function processCurriculumSheet(sh, fileName){
+  const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
+
+  const meta = {
+    dept: (rows[0][1] || "").toString().trim(),
+    year: (rows[1][1] || "").toString().trim(),
+    docNum: (rows[2][1] || "").toString().trim(),
+    revDocNum: (rows[3][1] || "").toString().trim(),
+    approved: (rows[4][1] || "").toString().trim() === "확정",
+    meetingDate: (rows[5][1] || "").toString().trim()
+  };
+
+  meta.year = String(meta.year).trim();
+
+  if(!meta.dept || !meta.year || !meta.docNum){
+    alert("학과명, 입학년도, 문서번호는 반드시 입력해야 합니다.");
+    return;
+  }
+
+  let start = rows.findIndex(r => r[0] === "개설학년");
+  if(start === -1){
+    alert("표 헤더(개설학년)를 찾지 못했습니다.");
+    return;
+  }
+
+  const headers = rows[start];
+  const dataRows = rows.slice(start + 1)
+    .filter(r => r.some(c => c !== undefined && c !== null && c !== ""));
+
+  const curriculum = dataRows.map(r => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = r[i] ?? "");
+    return obj;
+  });
+
+  let all = getData();
+  let prev = null;
+
+  if(meta.revDocNum){
+    prev = all.find(d => d.dept === meta.dept && d.docNum === meta.revDocNum);
+  }
+
+  const changes = prev ? compare(prev.data, curriculum) : null;
+
+  const entry = {
+    ...meta,
+    data: curriculum,
+    changes,
+    uploadDate: new Date().toISOString()
+  };
+
+  all = all.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
+  all.push(entry);
+
+  saveData(all);
+
+  /* 기록 저장 */
+  let hist = getHistory();
+  hist.push({
+    type: "전체 업로드",
+    dept: meta.dept,
+    year: meta.year,
+    docNum: meta.docNum,
+    changedCount: "-",
+    fileName: fileName,
+    uploadDate: entry.uploadDate
+  });
+  saveHistory(hist);
+
+  alert("입학자 교육과정 업로드 완료!");
+  renderDeptList();
+  renderUploadHistory();
+}
+  /* ---------------------------
+   2) 변경사유서 업로드 처리
+--------------------------- */
+function processChangeSheet(sh, fileName){
+  const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
+
+  const dept = (rows[0][1] || "").toString().trim();
+  const approvedText = (rows[1][1] || "").toString().trim();
+  const meetingDate = (rows[2][1] || "").toString().trim();
+  const docNum = (rows[3][1] || "").toString().trim();
+
+  if (!dept) {
+    alert("변경사유서의 학과명을 입력해주세요.");
+    return;
+  }
+
+  let start = rows.findIndex(r => r[0] === "(변경할)교육과정 연도");
+  if(start === -1){
+    alert("변경사유서 형식이 올바르지 않습니다.");
+    return;
+  }
+
+  const dataRows = rows.slice(start + 1)
+    .filter(r => r.some(c => c !== undefined && c !== null && c !== ""));
+
+  let all = getData();
+  let appliedCount = 0;
+  let years = new Set();
+  let notFound = [];
+
+  dataRows.forEach(r => {
+    const year = String(r[0] || "").trim();
+    if (!year) return;
+    years.add(year);
+
+    const prev = {
+      year,
+      grade: r[1], semester: r[2], type: r[3], name: r[4],
+      credit: r[5], total: r[6], theory: r[7], practice: r[8], skill: r[9], experiment: r[10]
+    };
+
+    const reason = (r[11] || "").toString().trim();
+
+    const next = {
+      year,
+      grade: r[12], semester: r[13], type: r[14], name: r[15],
+      credit: r[16], total: r[17], theory: r[18], practice: r[19], skill: r[20], experiment: r[21]
+    };
+
+    const candidates = all.filter(d => d.dept === dept && String(d.year) === year);
+    if (!candidates.length){
+      notFound.push(`(${year}) ${prev.name} - 해당 연도 교육과정 없음`);
+      return;
+    }
+
+    candidates.sort((a,b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+    const entry = candidates[0];
+
+    if (!entry.data) return;
+
+    const idx = entry.data.findIndex(row =>
+      (row["교과목명"] || "").toString().trim() === (prev.name || "").toString().trim()
+    );
+
+    if (idx === -1) {
+      notFound.push(`(${year}) ${prev.name} - 기존 과목 없음`);
+      return;
+    }
+
+    const before = { ...entry.data[idx] };
+    const updated = { ...before };
+
+    function applyField(key, value){
+      if(value !== undefined && value !== null && value !== ""){
+        updated[key] = value;
+      }
+    }
+
+    applyField("개설학년", next.grade);
+    applyField("개설학기", next.semester);
+    applyField("이수구분", next.type);
+    applyField("교과목명", next.name);
+    applyField("학점", next.credit);
+    applyField("총시수", next.total);
+    applyField("이론시수", next.theory);
+    applyField("실습시수", next.practice);
+    applyField("실기시수", next.skill);
+    applyField("실험시수", next.experiment);
+
+    entry.data[idx] = updated;
+
+    const diff = {};
+    ["개설학년","개설학기","이수구분","교과목명","학점","총시수",
+     "이론시수","실습시수","실기시수","실험시수"].forEach(k => {
+      if ((before[k] || "") !== (updated[k] || "")) {
+        diff[k] = { before: before[k] || "", after: updated[k] || "" };
+      }
+    });
+
+    if (Object.keys(diff).length > 0){
+      if (!entry.changes) entry.changes = [];
+      entry.changes.push({
+        type: "변경",
+        subject: before["교과목명"],
+        detail: diff,
+        reason,
+        docNum,
+        changeDate: meetingDate || new Date().toISOString().slice(0,10),
+        year
+      });
+    }
+
+    if (approvedText) entry.approved = (approvedText === "확정");
+    if (meetingDate) entry.meetingDate = meetingDate;
+
+    appliedCount++;
+  });
+
+  saveData(all);
+
+  /* 기록 저장 */
+  let hist = getHistory();
+  hist.push({
+    type: "변경",
+    dept,
+    year: Array.from(years).sort().join(", "),
+    docNum,
+    changedCount: appliedCount,
+    fileName,
+    uploadDate: new Date().toISOString()
+  });
+  saveHistory(hist);
+
+  let msg = `변경사유서 적용 완료: ${appliedCount}개 과목 반영됨.`;
+  if (notFound.length){
+    msg += `\n다음 과목은 찾지 못해 미반영됨:\n - ${notFound.join("\n - ")}`;
+  }
+
+  alert(msg);
+  renderDeptList();
+  renderUploadHistory();
+}
+
+
+/* ---------------------------
+   변경내역 비교 (전체 업로드용)
 --------------------------- */
 function compare(prev, next){
   const changes = [];
@@ -212,26 +386,27 @@ function compare(prev, next){
 
   Object.keys(nextMap).forEach(subj => {
     if(!prevMap[subj]){
-      changes.push({ type:"추가됨", subject: subj, after: nextMap[subj] });
+      changes.push({ type:"추가", subject: subj, after: nextMap[subj] });
     } else {
       const diff = {};
       const a = nextMap[subj];
       const b = prevMap[subj];
 
       Object.keys(a).forEach(k => {
-        if((a[k] || "") !== (b[k] || "")){
+        if ((a[k] || "") !== (b[k] || "")) {
           diff[k] = { before: b[k] || "", after: a[k] || "" };
         }
       });
 
-      if(Object.keys(diff).length > 0)
-        changes.push({ type:"변경됨", subject: subj, detail: diff });
+      if (Object.keys(diff).length > 0) {
+        changes.push({ type:"변경", subject: subj, detail: diff });
+      }
     }
   });
 
   Object.keys(prevMap).forEach(subj => {
-    if(!nextMap[subj]){
-      changes.push({ type:"삭제됨", subject: subj, before: prevMap[subj] });
+    if (!nextMap[subj]) {
+      changes.push({ type:"삭제", subject: subj, before: prevMap[subj] });
     }
   });
 
@@ -263,24 +438,29 @@ function renderDeptList(){
    업로드 기록 렌더링
 --------------------------- */
 function renderUploadHistory(){
-  const all = getData().sort((a,b) => new Date(b.uploadDate) - new Date(a.uploadDate));
+  const hist = getHistory().sort((a,b) => new Date(b.uploadDate) - new Date(a.uploadDate));
   const tbody = document.getElementById("uploadHistory");
-
   tbody.innerHTML = "";
 
-  all.forEach((e, idx) => {
+  hist.forEach((e, index) => {
     const tr = document.createElement("tr");
 
     tr.innerHTML = `
+      <td class="border px-2 py-1">${e.type}</td>
       <td class="border px-2 py-1">${e.dept}</td>
-      <td class="border px-2 py-1">${e.year}</td>
+      <td class="border px-2 py-1">${e.year || "-"}</td>
       <td class="border px-2 py-1">${e.docNum}</td>
+      <td class="border px-2 py-1">${e.changedCount}</td>
       <td class="border px-2 py-1">${new Date(e.uploadDate).toLocaleString()}</td>
+
       <td class="border px-2 py-1 text-center">
-        <button onclick="deleteEntry(${idx})"
-                class="text-red-600 hover:text-red-800 text-sm">
-          🗑 삭제
-        </button>
+        <button class="text-green-600 hover:underline text-sm"
+                onclick='downloadHistoryFile(${index})'>📥 다운로드</button>
+      </td>
+
+      <td class="border px-2 py-1 text-center">
+        <button class="text-red-600 hover:underline text-sm"
+                onclick='deleteHistory(${index})'>🗑 삭제</button>
       </td>
     `;
 
@@ -290,19 +470,100 @@ function renderUploadHistory(){
 
 
 /* ---------------------------
-   업로드 기록 개별 삭제
+   업로드 기록 다운로드
 --------------------------- */
-function deleteEntry(index){
-  if(confirm("해당 업로드 기록을 삭제하시겠습니까?")){
-    let all = getData();
-    all.splice(index, 1);
-    saveData(all);
-    renderUploadHistory();
+function downloadHistoryFile(index){
+  const hist = getHistory();
+  const item = hist[index];
+  const all = getData();
+
+  if (item.type === "전체 업로드"){
+    const entry = all.find(d =>
+      d.dept === item.dept &&
+      d.year === item.year &&
+      d.docNum === item.docNum
+    );
+
+    if (!entry){
+      alert("원본 데이터가 삭제되어 다운로드할 수 없습니다.");
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ["학과명", entry.dept],
+      ["입학년도", entry.year],
+      ["문서번호", entry.docNum],
+      ["수정문서번호", entry.revDocNum || ""],
+      ["교육과정위원회 확정여부", entry.approved ? "확정" : "미확정"],
+      ["교육과정위원회 개최일", entry.meetingDate || ""],
+      [],
+      ["개설학년","개설학기","교과목명","수준",
+       "이수구분","학점","총시수","이론시수","실습시수","실험시수","실기시수","비고"]
+    ];
+
+    (entry.data || []).forEach(r => {
+      rows.push([
+        r["개설학년"], r["개설학기"], r["교과목명"], r["수준"],
+        r["이수구분"], r["학점"], r["총시수"], r["이론시수"],
+        r["실습시수"], r["실험시수"], r["실기시수"], r["비고"]
+      ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "교육과정");
+    XLSX.writeFile(wb, `${item.dept}_${item.year}_입학자교육과정.xlsx`);
+  }
+
+  else if (item.type === "변경"){
+    const wb = XLSX.utils.book_new();
+    const rows = [
+      ["학과명", item.dept],
+      ["적용연도", item.year],
+      ["문서번호", item.docNum],
+      [],
+      ["(변경할)교육과정 연도","(전)개설학년","(전)개설학기",
+       "(전)이수구분","(전)교과목명","(전)학점","(전)총시수",
+       "(전)이론","(전)실습","(전)실기","(전)실험",
+       "변경사유","(후)개설학년","(후)개설학기","(후)이수구분",
+       "(후)교과목명","(후)학점","(후)총시수","(후)이론",
+       "(후)실습","(후)실기","(후)실험"]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "변경사유서");
+    XLSX.writeFile(wb, `${item.dept}_변경사유서.xlsx`);
   }
 }
 
 
-/* 초기 실행 */
+/* ---------------------------
+   업로드 기록 삭제
+--------------------------- */
+function deleteHistory(index){
+  if(!confirm("해당 기록을 삭제하시겠습니까?")) return;
+
+  let hist = getHistory();
+  const item = hist[index];
+
+  /* 데이터에서 삭제 */
+  let all = getData();
+  if (item.type === "전체 업로드"){
+    all = all.filter(d =>
+      !(d.dept === item.dept && d.year === item.year && d.docNum === item.docNum)
+    );
+    saveData(all);
+  }
+
+  /* 기록 삭제 */
+  hist.splice(index, 1);
+  saveHistory(hist);
+
+  renderUploadHistory();
+}
+
+
+/* 초기 호출 */
 renderDeptList();
 renderUploadHistory();
 
@@ -310,3 +571,5 @@ renderUploadHistory();
 
 </body>
 </html>
+
+
