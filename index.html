@@ -1,118 +1,231 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>입학자 교육과정 관리 시스템</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
 </head>
 
-<body class="bg-gray-100 min-h-screen">
-  <div class="max-w-4xl mx-auto py-10">
-    <h1 class="text-3xl font-bold mb-8 text-center">입학자 교육과정 관리 시스템</h1>
+<body class="bg-gray-100 min-h-screen p-6">
 
-    <!-- 업로드 카드 -->
-    <div class="bg-white shadow p-6 rounded-lg mb-10">
-      <h2 class="text-xl font-semibold mb-4">📤 교육과정 업로드</h2>
+  <div class="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow">
+    <h1 class="text-3xl font-bold mb-6 text-center">입학자 교육과정 업로드</h1>
 
-      <div class="grid grid-cols-1 gap-4 mb-4">
-        <input id="dept" type="text" placeholder="학과명 입력" class="border p-2 rounded">
-        <input id="year" type="number" placeholder="입학년도 입력 (예: 2026)" class="border p-2 rounded">
-        <input id="docNum" type="text" placeholder="문서번호 입력 (예: 교육과정-2026-01)" class="border p-2 rounded">
-        <input id="revDocNum" type="text" placeholder="수정 문서번호 (수정 시만 입력)" class="border p-2 rounded">
-
-        <label class="flex items-center space-x-2">
-          <input id="approved" type="checkbox" class="w-4 h-4">
-          <span>교육과정위원회 확정됨</span>
-        </label>
-      </div>
-
-      <input id="fileInput" type="file" accept=".xlsx,.xls" class="border p-2 rounded w-full mb-4">
-
-      <button onclick="uploadCurriculum()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-        업로드
-      </button>
+    <!-- 파일 업로드 -->
+    <div class="mb-6">
+      <input id="fileInput" type="file" accept=".xlsx,.xls" class="border p-3 rounded w-full"/>
     </div>
 
-    <!-- Index Table -->
-    <div class="bg-white shadow p-6 rounded-lg">
-      <h2 class="text-xl font-semibold mb-4">📚 전체 교육과정 INDEX</h2>
-      <table class="w-full text-left border">
-        <thead class="bg-gray-200">
-          <tr>
-            <th class="border p-2">학과</th>
-            <th class="border p-2">학년도</th>
-            <th class="border p-2">문서번호</th>
-            <th class="border p-2">수정문서</th>
-            <th class="border p-2">확정여부</th>
-          </tr>
-        </thead>
-        <tbody id="indexTable"></tbody>
-      </table>
-    </div>
+    <button onclick="handleUpload()"
+            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+      업로드
+    </button>
+  </div>
+
+  <div class="max-w-4xl mx-auto bg-white p-6 mt-8 rounded-xl shadow">
+    <h2 class="text-2xl font-semibold mb-4">전체 학과 목록</h2>
+    <ul id="deptList" class="list-disc pl-5 space-y-2"></ul>
   </div>
 
 <script>
-function loadIndex() {
-  const data = JSON.parse(localStorage.getItem("curriculumIndex") || "[]");
-  const tbody = document.getElementById("indexTable");
-  tbody.innerHTML = "";
 
-  data.forEach(item => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="border p-2">${item.dept}</td>
-      <td class="border p-2">${item.year}</td>
-      <td class="border p-2">${item.docNum}</td>
-      <td class="border p-2">${item.revDocNum || "-"}</td>
-      <td class="border p-2">${item.approved ? "✔ 확정" : "미확정"}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+// 고정 학과 순서
+const DEPT_ORDER = [
+  "신학과",
+  "사회복지학과",
+  "보육과정",
+  "상담심리학과",
+  "G2빅데이터경영학과",
+  "실용음악학과",
+  "간호학과",
+  "식품영양학과",
+  "G2빅데이터경영학과(국제)",
+  "글로벌경영학과",
+  "AI기반경영학과",
+  "외국인전담학과"
+];
+
+// LocalStorage 키
+const STORAGE_KEY = "curriculumData";
+
+// -----------------------------
+// 데이터 불러오기
+// -----------------------------
+function getData() {
+  return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
 }
 
-function uploadCurriculum() {
-  const dept = document.getElementById("dept").value;
-  const year = document.getElementById("year").value;
-  const docNum = document.getElementById("docNum").value;
-  const revDocNum = document.getElementById("revDocNum").value;
-  const approved = document.getElementById("approved").checked;
-  const file = document.getElementById("fileInput").files[0];
+// -----------------------------
+// 데이터 저장
+// -----------------------------
+function saveData(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
 
-  if (!dept || !year || !docNum || !file) {
-    alert("학과, 학년도, 문서번호, 파일은 필수입니다.");
+// -----------------------------
+// 엑셀 업로드 처리
+// -----------------------------
+function handleUpload() {
+  const file = document.getElementById("fileInput").files[0];
+  if (!file) {
+    alert("엑셀 파일을 업로드해주세요!");
     return;
   }
 
   const reader = new FileReader();
-  reader.onload = function(e) {
-    const workbook = XLSX.read(e.target.result, { type: "binary" });
-    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const json = XLSX.utils.sheet_to_json(sheet);
 
-    // 저장할 데이터 구조
-    const entry = {
-      uploadDate: new Date(),
-      dept,
-      year,
-      docNum,
-      revDocNum,
-      approved,
-      data: json
+  reader.onload = function (e) {
+    const workbook = XLSX.read(e.target.result, { type: "binary" });
+
+    // 시트명 반드시 "교육과정"
+    const sheet = workbook.Sheets["교육과정"];
+    if (!sheet) {
+      alert("시트 이름이 '교육과정'인지 확인해주세요!");
+      return;
+    }
+
+    // 엑셀 전체를 배열 형태로 읽기
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    // -----------------------------
+    // 메타데이터 추출
+    // -----------------------------
+    const meta = {
+      dept: rows[0][1]?.trim(),
+      year: rows[1][1]?.trim(),
+      docNum: rows[2][1]?.trim(),
+      revDocNum: rows[3][1]?.trim(),
+      approved: rows[4][1] === "확정",
+      meetingDate: rows[5][1] || ""
     };
 
-    let index = JSON.parse(localStorage.getItem("curriculumIndex") || "[]");
-    index.push(entry);
-    localStorage.setItem("curriculumIndex", JSON.stringify(index));
+    // -----------------------------
+    // 본문 데이터(교육과정 테이블)
+    // -----------------------------
+    let startRow = 0;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i][0] === "개설학년") {
+        startRow = i;
+        break;
+      }
+    }
+
+    const headers = rows[startRow];
+    const dataRows = rows.slice(startRow + 1);
+
+    const curriculum = dataRows.map(row => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        obj[h] = row[i] || "";
+      });
+      return obj;
+    });
+
+    // 기존 데이터 불러오기
+    let allData = getData();
+
+    // 이전 문서 찾기 (문서번호로 매칭)
+    const prev = allData.find(d => d.dept === meta.dept && d.docNum === meta.docNum);
+
+    // 변경내역 비교
+    let changes = null;
+    if (prev) {
+      changes = compareChanges(prev.data, curriculum);
+    }
+
+    // 저장할 항목 구성
+    const entry = {
+      ...meta,
+      data: curriculum,
+      changes,
+      uploadDate: new Date().toISOString()
+    };
+
+    // 기존 데이터에서 동일 문서 삭제
+    allData = allData.filter(d => !(d.dept === meta.dept && d.docNum === meta.docNum));
+
+    // 새로운 데이터 추가
+    allData.push(entry);
+    saveData(allData);
 
     alert("업로드 완료!");
-    loadIndex();
+    renderDeptList();
   };
+
   reader.readAsBinaryString(file);
 }
 
-loadIndex();
+// -----------------------------
+// 변경 비교 로직
+// -----------------------------
+function compareChanges(prevData, newData) {
+  const changes = [];
+
+  // 과목명 기준 비교
+  const prevMap = {};
+  prevData.forEach(item => {
+    prevMap[item["교과목명"]] = item;
+  });
+
+  newData.forEach(item => {
+    const name = item["교과목명"];
+    if (!prevMap[name]) {
+      changes.push({
+        type: "추가됨",
+        subject: name,
+        before: null,
+        after: item
+      });
+    } else {
+      // 항목별 비교
+      const diff = {};
+      Object.keys(item).forEach(key => {
+        if (item[key] !== prevMap[name][key]) {
+          diff[key] = {
+            before: prevMap[name][key],
+            after: item[key]
+          };
+        }
+      });
+
+      if (Object.keys(diff).length > 0) {
+        changes.push({
+          type: "변경됨",
+          subject: name,
+          detail: diff
+        });
+      }
+    }
+  });
+
+  return changes;
+}
+
+// -----------------------------
+// 학과 목록 렌더링
+// -----------------------------
+function renderDeptList() {
+  const list = document.getElementById("deptList");
+  list.innerHTML = "";
+
+  const saved = getData();
+
+  const deptSet = new Set(saved.map(d => d.dept));
+
+  [...DEPT_ORDER]
+    .filter(d => deptSet.has(d))
+    .forEach(dept => {
+      const li = document.createElement("li");
+      li.innerHTML = `<a href="./dept/${dept}.html" class="text-blue-600 underline">${dept}</a>`;
+      list.appendChild(li);
+    });
+}
+
+renderDeptList();
+
 </script>
 
 </body>
