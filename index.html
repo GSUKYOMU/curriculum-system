@@ -447,7 +447,7 @@ function compare(prev, next) {
   const nextMap = {};
 
   prev.forEach(i => { if (i["교과목명"]) prevMap[i["교과목명"]] = i; });
-  next.forEach	i => { if (i["교과목명"]) nextMap[i["교과목명"]] = i; });
+  next.forEach(i => { if (i["교과목명"]) nextMap[i["교과목명"]] = i; });
 
   // 추가 및 변경
   Object.keys(nextMap).forEach(subj => {
