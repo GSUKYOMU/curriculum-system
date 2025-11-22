@@ -104,6 +104,21 @@ const STORAGE_KEY = "curriculumData";
 const LOG_STORAGE_KEY = "curriculumUploadLogs";
 
 /* ---------------------------
+   공통 정규화 함수
+--------------------------- */
+function clean(v) {
+  return (v || "")
+    .toString()
+    .normalize("NFKC")        // 유니코드 정규화 (Ⅰ vs I 등)
+    .replace(/ /g, " ")  // 특수 공백을 일반 공백으로
+    .trim();
+}
+
+function same(a, b) {
+  return clean(a) === clean(b);
+}
+
+/* ---------------------------
    저장/불러오기
 --------------------------- */
 function getData() {
@@ -164,15 +179,13 @@ function processCurriculumSheet(sh) {
   const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
 
   const meta = {
-    dept: (rows[0]?.[1] || "").toString().trim(),
-    year: (rows[1]?.[1] || "").toString().trim(),
-    docNum: (rows[2]?.[1] || "").toString().trim(),
-    revDocNum: (rows[3]?.[1] || "").toString().trim(),
-    approved: (rows[4]?.[1] || "").toString().trim() === "확정",
-    meetingDate: (rows[5]?.[1] || "").toString().trim()
+    dept: clean(rows[0]?.[1]),
+    year: clean(rows[1]?.[1]),
+    docNum: clean(rows[2]?.[1]),
+    revDocNum: clean(rows[3]?.[1]),
+    approved: clean(rows[4]?.[1]) === "확정",
+    meetingDate: clean(rows[5]?.[1])
   };
-
-  meta.year = String(meta.year).trim();
 
   if (!meta.dept || !meta.year || !meta.docNum) {
     alert("학과명, 입학년도, 문서번호는 반드시 입력해야 합니다.");
@@ -243,17 +256,14 @@ function processCurriculumSheet(sh) {
 
 /* ---------------------------
    2) 변경사유서(과목별) 처리
-   - 시트 이름: '변경사유서'
-   - 표 헤더 첫 열: '(변경할)교육과정 연도'
-   - '전' 정보가 없거나 기존 과목을 찾지 못하면 자동으로 신규 과목 추가
 --------------------------- */
 function processChangeSheet(sh) {
   const rows = XLSX.utils.sheet_to_json(sh, { header: 1 });
 
-  const dept = (rows[0]?.[1] || "").toString().trim();
-  const approvedText = (rows[1]?.[1] || "").toString().trim(); // 확정 / 미확정
-  const meetingDate = (rows[2]?.[1] || "").toString().trim();
-  const docNum = (rows[3]?.[1] || "").toString().trim();
+  const dept = clean(rows[0]?.[1]);
+  const approvedText = clean(rows[1]?.[1]); // 확정 / 미확정
+  const meetingDate = clean(rows[2]?.[1]);
+  const docNum = clean(rows[3]?.[1]);
 
   if (!dept) {
     alert("변경사유서의 학과명을 입력해주세요.");
@@ -283,7 +293,7 @@ function processChangeSheet(sh) {
   const yearsSet = new Set();
 
   dataRows.forEach(r => {
-    const year = String(r[0] || "").trim();
+    const year = clean(r[0]);
     if (!year) return;
     yearsSet.add(year);
 
@@ -293,7 +303,7 @@ function processChangeSheet(sh) {
       grade: r[1], semester: r[2], type: r[3], name: r[4],
       credit: r[5], total: r[6], theory: r[7], practice: r[8], skill: r[9], experiment: r[10]
     };
-    const reason = (r[11] || "").toString().trim();
+    const reason = clean(r[11]);
 
     // (후) 정보
     const next = {
@@ -302,10 +312,14 @@ function processChangeSheet(sh) {
       credit: r[16], total: r[17], theory: r[18], practice: r[19], skill: r[20], experiment: r[21]
     };
 
+    const beforeName = clean(prev.name);
+    const afterName = clean(next.name);
+    const baseName = beforeName || afterName;
+
     // 해당 학과·연도 최신 교육과정 찾기
-    const candidates = all.filter(d => d.dept === dept && String(d.year) === year);
+    const candidates = all.filter(d => d.dept === dept && same(d.year, year));
     if (!candidates.length) {
-      notFound.push(`(${year}) ${prev.name || next.name || "교과목명 없음"} - 해당 연도 교육과정 없음`);
+      notFound.push(`(${year}) ${baseName || "교과목명 없음"} - 해당 연도 교육과정 없음`);
       return;
     }
     candidates.sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));
@@ -313,18 +327,17 @@ function processChangeSheet(sh) {
 
     if (!entry.data || !Array.isArray(entry.data)) return;
 
-    // 기존 과목 찾기 (우선 prev.name, 없으면 next.name 기준)
-    const targetName = (prev.name || next.name || "").toString().trim();
+    // 기존 과목 찾기
     let idx = -1;
-    if (targetName) {
+    if (baseName) {
       idx = entry.data.findIndex(row =>
-        (row["교과목명"] || "").toString().trim() === targetName
+        same(row["교과목명"], baseName)
       );
     }
 
     // 기존 과목이 없으면 -> 신규 과목으로 추가
     if (idx === -1) {
-      if (!next.name) {
+      if (!afterName) {
         notFound.push(`(${year}) (신규) 교과목명 없음 - 추가 불가`);
         return;
       }
@@ -332,7 +345,7 @@ function processChangeSheet(sh) {
         "개설학년": next.grade || "",
         "개설학기": next.semester || "",
         "이수구분": next.type || "",
-        "교과목명": next.name || "",
+        "교과목명": afterName || "",
         "학점": next.credit || "",
         "총시수": next.total || "",
         "이론시수": next.theory || "",
@@ -348,8 +361,10 @@ function processChangeSheet(sh) {
       if (!entry.changes) entry.changes = [];
       entry.changes.push({
         type: "추가",
-        subject: next.name,
-        detail: newSubject,
+        subject: afterName,
+        detail: { ...newSubject },
+        beforeName,
+        afterName,
         reason,
         changeDocNum: docNum,
         changeDate: meetingDate || new Date().toISOString().slice(0, 10),
@@ -365,8 +380,8 @@ function processChangeSheet(sh) {
     }
 
     // 기존 과목이 있으면 -> 변경 반영
-    const before = { ...entry.data[idx] };
-    const updated = { ...before };
+    const beforeRow = { ...entry.data[idx] };
+    const updated = { ...beforeRow };
 
     function applyField(fieldName, newValue) {
       if (newValue !== undefined && newValue !== null && newValue !== "") {
@@ -377,7 +392,7 @@ function processChangeSheet(sh) {
     applyField("개설학년", next.grade);
     applyField("개설학기", next.semester);
     applyField("이수구분", next.type);
-    applyField("교과목명", next.name);
+    applyField("교과목명", afterName || beforeName);
     applyField("학점", next.credit);
     applyField("총시수", next.total);
     applyField("이론시수", next.theory);
@@ -390,8 +405,10 @@ function processChangeSheet(sh) {
     const detail = {};
     ["개설학년","개설학기","이수구분","교과목명","학점",
      "총시수","이론시수","실습시수","실기시수","실험시수"].forEach(f => {
-      if ((before[f] || "") !== (updated[f] || "")) {
-        detail[f] = { before: before[f] || "", after: updated[f] || "" };
+      const oldVal = beforeRow[f] ?? "";
+      const newVal = updated[f] ?? "";
+      if (!same(oldVal, newVal)) {
+        detail[f] = { before: oldVal, after: newVal };
       }
     });
 
@@ -399,8 +416,10 @@ function processChangeSheet(sh) {
     if (Object.keys(detail).length > 0) {
       entry.changes.push({
         type: "변경",
-        subject: before["교과목명"] || targetName,
-        detail,
+        subject: afterName || beforeName,
+        detail: { ...detail },
+        beforeName,
+        afterName: afterName || beforeName,
         reason,
         changeDocNum: docNum,
         changeDate: meetingDate || new Date().toISOString().slice(0, 10),
@@ -446,8 +465,14 @@ function compare(prev, next) {
   const prevMap = {};
   const nextMap = {};
 
-  prev.forEach(i => { if (i["교과목명"]) prevMap[i["교과목명"]] = i; });
-  next.forEach(i => { if (i["교과목명"]) nextMap[i["교과목명"]] = i; });
+  prev.forEach(i => {
+    const name = clean(i["교과목명"]);
+    if (name) prevMap[name] = i;
+  });
+  next.forEach(i => {
+    const name = clean(i["교과목명"]);
+    if (name) nextMap[name] = i;
+  });
 
   // 추가 및 변경
   Object.keys(nextMap).forEach(subj => {
@@ -459,8 +484,10 @@ function compare(prev, next) {
       const b = prevMap[subj];
 
       Object.keys(a).forEach(k => {
-        if ((a[k] || "") !== (b[k] || "")) {
-          diff[k] = { before: b[k] || "", after: a[k] || "" };
+        const oldVal = b[k] ?? "";
+        const newVal = a[k] ?? "";
+        if (!same(oldVal, newVal)) {
+          diff[k] = { before: oldVal, after: newVal };
         }
       });
 
@@ -532,8 +559,6 @@ function renderUploadHistory() {
 
 /* ---------------------------
    업로드 기록 삭제
-   - 교육과정 템플릿 로그 삭제 시: curriculumData에서도 해당 데이터 삭제
-   - 변경사유서 로그 삭제 시: 로그만 삭제, 데이터는 유지
 --------------------------- */
 function deleteEntry(logIndex) {
   const logs = getLogs();
@@ -549,7 +574,7 @@ function deleteEntry(logIndex) {
   // 교육과정 템플릿인 경우 curriculumData에서도 삭제
   if (target.kind === "교육과정") {
     let all = getData();
-    all = all.filter(e => !(e.dept === target.dept && String(e.year) === String(target.year) && e.docNum === target.docNum));
+    all = all.filter(e => !(e.dept === target.dept && same(e.year, target.year) && e.docNum === target.docNum));
     saveData(all);
   }
 
