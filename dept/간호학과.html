@@ -48,7 +48,19 @@
        class="border p-2 rounded w-full mb-4"/>
 
 <!-- 연도 버튼 -->
-<div id="yearButtons" class="flex flex-wrap gap-2 mb-4"></div>
+<div class="flex flex-wrap items-center gap-3 mb-4">
+  <div id="yearButtons" class="flex flex-wrap gap-2"></div>
+  <span id="yearInfo" class="text-sm text-gray-600"></span>
+</div>
+
+<!-- 다운로드 -->
+<div class="flex items-center gap-2 mb-4">
+  <label for="gradeSelect" class="text-sm text-gray-700">다운로드 학년:</label>
+  <select id="gradeSelect" class="border rounded px-2 py-1 text-sm">
+    <option value="ALL">전체</option>
+  </select>
+  <button onclick="downloadExcel()" class="bg-emerald-600 text-white text-sm px-3 py-1.5 rounded hover:bg-emerald-700">엑셀 다운로드</button>
+</div>
 
 <!-- 다운로드 -->
 <div class="flex items-center gap-2 mb-4">
@@ -87,6 +99,7 @@
 -------------------------- */
 const STORAGE_KEY = "curriculumData";
 let selectedYear = null;
+let availableYears = [];
 let baseEntry = null;  // 원본
 let finalData = [];    // 변경 반영 최종본
 let sortState = {};
@@ -158,19 +171,52 @@ function init(){
     return;
   }
 
-  const years=[...new Set(raw.map(e=>clean(e.year)))].sort();
-  const wrap=document.getElementById("yearButtons");
+  availableYears=[...new Set(raw.map(e=>clean(e.year)))].sort();
+  selectedYear = availableYears[0];
 
-  years.forEach(y=>{
+  renderYearButtons();
+  updateYearInfo();
+  loadYear();
+}
+
+function yearButtonClass(isActive){
+  const base = "px-3 py-1 rounded border text-sm";
+  return isActive
+    ? `${base} bg-blue-600 text-white border-blue-700`
+    : `${base} bg-white text-gray-800 hover:bg-gray-50`;
+}
+
+function renderYearButtons(){
+  const wrap=document.getElementById("yearButtons");
+  if(!wrap) return;
+
+  wrap.innerHTML="";
+  availableYears.forEach(y=>{
     const btn=document.createElement("button");
-    btn.textContent=y+" 입학자";
-    btn.className="px-3 py-1 rounded border";
-    btn.onclick=()=>{ selectedYear=y; loadYear(); };
+    btn.textContent=`${y} 입학자`;
+    btn.className=yearButtonClass(clean(y)===clean(selectedYear));
+    btn.onclick=()=>{
+      selectedYear=y;
+      renderYearButtons();
+      updateYearInfo();
+      loadYear();
+    };
     wrap.appendChild(btn);
   });
+}
 
-  selectedYear = years[0];
-  loadYear();
+function updateYearInfo(){
+  const badge=document.getElementById("yearInfo");
+  if(!badge) return;
+
+  if(!selectedYear){
+    badge.textContent="표시할 연도가 없습니다.";
+    badge.className="text-sm text-gray-500";
+    return;
+  }
+
+  badge.textContent=`현재 ${selectedYear} 입학자 교육과정 표시중`;
+  badge.className="text-sm px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200";
 }
 
 /* --------------------------
@@ -185,6 +231,7 @@ function loadYear(){
     alert("해당 연도 데이터가 없습니다.");
     finalData = [];
     finalData._mark = {};
+    updateYearInfo();
     updateGradeOptions();
     renderTable();
     return;
@@ -197,6 +244,7 @@ function loadYear(){
     alert("저장된 교육과정 데이터가 비어 있습니다. 업로드를 다시 확인해주세요.");
     finalData = [];
     finalData._mark = {};
+    updateYearInfo();
     updateGradeOptions();
     renderTable();
     return;
@@ -211,6 +259,7 @@ function loadYear(){
   // 원본 + changes → 최종본 생성
   finalData = buildFinal(rows, normalizedChanges);
   defaultSort(finalData);
+  updateYearInfo();
   updateGradeOptions();
 
   renderTable();
