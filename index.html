@@ -308,19 +308,38 @@ else type = "변경";
 
     // detail 만들기
     const detail = {};
-    if (type === "변경") {
-      const fields = {
-        "개설학년":"grade","개설학기":"sem","이수구분":"type","교과목명":"name",
-        "학점":"credit","총시수":"total","이론시수":"theory",
-        "실습시수":"practice","실기시수":"skill","실험시수":"experiment"
-      };
+    const fields = {
+      "개설학년":"grade","개설학기":"sem","이수구분":"type","교과목명":"name",
+      "학점":"credit","총시수":"total","이론시수":"theory",
+      "실습시수":"practice","실기시수":"skill","실험시수":"experiment"
+    };
 
+    if (type === "변경") {
       Object.keys(fields).forEach(label => {
         const key = fields[label];
-        const oldVal = original[label] ?? "";
+        const oldVal = (original && original[label]) ?? "";
         const newVal = after[key] ?? "";
         if (!same(oldVal,newVal)) {
           detail[label] = { before: oldVal, after: newVal };
+        }
+      });
+    }
+
+    if (type === "신규") {
+      Object.keys(fields).forEach(label => {
+        const key = fields[label];
+        const newVal = after[key] ?? "";
+        if (clean(newVal) !== "") {
+          detail[label] = { before: "", after: newVal };
+        }
+      });
+    }
+
+    if (type === "폐지") {
+      Object.keys(fields).forEach(label => {
+        const oldVal = (original && original[label]) ?? before[fields[label]] ?? "";
+        if (clean(oldVal) !== "") {
+          detail[label] = { before: oldVal, after: "" };
         }
       });
     }
