@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>식품영양학과 입학자 교육과정</title>
+<title>외국인전담학과 입학자 교육과정</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
@@ -41,7 +41,14 @@
 <div class="max-w-5xl mx-auto bg-white p-6 mt-6 rounded-xl shadow">
 
 <a href="../index.html" class="text-blue-600 text-sm">← 메인으로</a>
-<h1 class="text-3xl font-bold mt-2 mb-4">식품영양학과 입학자 교육과정</h1>
+<h1 class="text-3xl font-bold mt-2 mb-1">외국인전담학과 입학자 교육과정</h1>
+<p class="text-sm text-gray-600 mb-3">G2빅데이터경영학과(국제), 글로벌경영학과, AI기반경영학과 중 선택해 조회하세요.</p>
+
+<!-- 교육과정 선택 -->
+<div class="flex flex-wrap items-center gap-2 mb-4">
+  <span class="text-sm text-gray-700">교육과정 선택:</span>
+  <div id="deptTabs" class="flex flex-wrap gap-2"></div>
+</div>
 
 <!-- 검색 -->
 <input id="searchInput" type="text" placeholder="과목명 검색..."
@@ -89,12 +96,18 @@
    공통 함수
 -------------------------- */
 const STORAGE_KEY = "curriculumData";
-const DEPT_NAME = "식품영양학과";
+const DEPT_OPTIONS = [
+  { id: "G2빅데이터경영학과(국제)", label: "G2빅데이터경영학과(국제)" },
+  { id: "글로벌경영학과", label: "글로벌경영학과" },
+  { id: "AI기반경영학과", label: "AI기반경영학과" }
+];
+let selectedDept = DEPT_OPTIONS[0].id;
 let selectedYear = null;
 let availableYears = [];
 let baseEntry = null;  // 원본
 let finalData = [];    // 변경 반영 최종본
 let sortState = {};
+let allEntries = [];
 
 function yearValue(v){
   const n = parseInt(clean(v), 10);
@@ -174,18 +187,55 @@ function defaultSort(arr){
 document.addEventListener("DOMContentLoaded", init);
 
 function init(){
-  const raw = loadData().filter(d => clean(d.dept)===DEPT_NAME);
+  const raw = loadData();
+  const allowed = DEPT_OPTIONS.map(o => clean(o.id));
+  allEntries = raw.filter(d => allowed.includes(clean(d.dept)));
 
-  if(!raw.length){
-    alert(`${DEPT_NAME} 데이터가 없습니다. 먼저 업로드 해주세요.`);
+  if(!allEntries.length){
+    alert(`${DEPT_OPTIONS.map(d=>d.label).join(', ')} 데이터가 없습니다. 먼저 업로드 해주세요.`);
     return;
   }
+
+  const firstWithData = DEPT_OPTIONS.find(o => allEntries.some(e => clean(e.dept) === clean(o.id)));
+  if (firstWithData) {
+    selectedDept = firstWithData.id;
+  }
+
+  renderDeptTabs();
+  refreshYears();
+}
+
+function renderDeptTabs(){
+  const wrap = document.getElementById("deptTabs");
+  wrap.innerHTML = "";
+  DEPT_OPTIONS.forEach(opt => {
+    const active = clean(opt.id) === clean(selectedDept);
+    const base = "px-3 py-1 rounded border text-sm";
+    const cls = active ? `${base} bg-blue-600 text-white border-blue-700` : `${base} bg-white text-gray-800 hover:bg-gray-50`;
+    const btn = document.createElement("button");
+    btn.className = cls;
+    btn.textContent = opt.label;
+    btn.onclick = () => selectDept(opt.id);
+    wrap.appendChild(btn);
+  });
+}
+
+function selectDept(dept){
+  if (clean(dept) === clean(selectedDept)) return;
+  selectedDept = dept;
+  refreshYears();
+}
+
+function refreshYears(){
+  const allowed = DEPT_OPTIONS.map(o => clean(o.id));
+  allEntries = loadData().filter(d => allowed.includes(clean(d.dept)));
+  const raw = allEntries.filter(d => clean(d.dept)===clean(selectedDept));
 
   availableYears=[...new Set(raw.map(e=>clean(e.year)))].sort((a,b)=>{
     const diff = yearValue(b) - yearValue(a);
     return diff !== 0 ? diff : clean(a).localeCompare(clean(b));
   });
-  selectedYear = availableYears[0];
+  selectedYear = availableYears[0] || null;
 
   renderYearButtons();
   updateYearInfo();
@@ -223,12 +273,12 @@ function updateYearInfo(){
   if(!badge) return;
 
   if(!selectedYear){
-    badge.textContent="표시할 연도가 없습니다.";
+    badge.textContent=`${selectedDept} 데이터가 없습니다.`;
     badge.className="text-sm text-gray-500";
     return;
   }
 
-  badge.textContent=`현재 ${selectedYear} 입학자 교육과정 표시중`;
+  badge.textContent=`현재 ${selectedDept} ${selectedYear} 입학자 교육과정 표시중`;
   badge.className="text-sm px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200";
 }
 
@@ -236,8 +286,16 @@ function updateYearInfo(){
    해당연도 데이터 불러오기
 -------------------------- */
 function loadYear(){
-  const all=loadData()
-    .filter(d => clean(d.dept)===DEPT_NAME && clean(d.year)===clean(selectedYear))
+  if(!selectedYear){
+    finalData = [];
+    finalData._mark = {};
+    updateGradeOptions();
+    renderTable();
+    return;
+  }
+
+  const all=allEntries
+    .filter(d => clean(d.dept)===clean(selectedDept) && clean(d.year)===clean(selectedYear))
     .sort((a,b)=> new Date(b.uploadDate)-new Date(a.uploadDate));
 
   if(!all.length){
@@ -568,7 +626,7 @@ function downloadExcel(){
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
   const gradeLabel = grade === "ALL" ? "전체" : grade;
-  const fileName = `${DEPT_NAME}_${selectedYear || "데이터"}_${gradeLabel}.xlsx`;
+  const fileName = `${selectedDept}_${selectedYear || "데이터"}_${gradeLabel}.xlsx`;
   XLSX.writeFile(wb, fileName);
 }
 
