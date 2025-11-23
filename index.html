@@ -106,10 +106,13 @@ function clean(v) {
   return (v || "")
     .toString()
     .normalize("NFKC")
-    .replace(/ /g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 function same(a, b) { return clean(a) === clean(b); }
+function changeKey(change) {
+  return clean(change?.subject || change?.after?.name || change?.before?.name || "");
+}
 
 function getData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
@@ -247,21 +250,21 @@ let start = rows.findIndex(r => clean(r[0]) === "(변경할)교육과정 연도"
 
     // before
     const before = {
-      grade:r[1], sem:r[2], type:r[3], name:r[4],
+      grade:r[1], sem:r[2], type:r[3], name:clean(r[4]),
       credit:r[5], total:r[6], theory:r[7],
       practice:r[8], skill:r[9], experiment:r[10]
     };
-    const beforeName = clean(before.name);
+    const beforeName = before.name;
 
     // after
     const after = {
-      grade:r[12], sem:r[13], type:r[14], name:r[15],
+      grade:r[12], sem:r[13], type:r[14], name:clean(r[15]),
       credit:r[16], total:r[17], theory:r[18],
       practice:r[19], skill:r[20], experiment:r[21]
     };
-    const afterName = clean(after.name);
+    const afterName = after.name;
 
-    const subject = afterName || beforeName;
+    const subject = changeKey({ subject: after.name || before.name, before, after });
     if (!subject) return;
 
     // 해당 학과·연도 데이터 찾기
