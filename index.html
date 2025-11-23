@@ -113,6 +113,16 @@ function same(a, b) { return clean(a) === clean(b); }
 function changeKey(change) {
   return clean(change?.subject || change?.after?.name || change?.before?.name || "");
 }
+function normalizeChange(change) {
+  const subject = changeKey(change);
+  if (!subject) return null;
+
+  const normalized = { ...change, subject };
+  if (change.before) normalized.before = { ...change.before, name: clean(change.before.name) };
+  if (change.after) normalized.after = { ...change.after, name: clean(change.after.name) };
+
+  return normalized;
+}
 
 function getData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
@@ -188,6 +198,10 @@ const body = rows.slice(start + 1).filter(r =>
     return o;
   });
 
+  data.forEach(row => {
+    if (row["교과목명"] !== undefined) row["교과목명"] = clean(row["교과목명"]);
+  });
+
   let all = getData();
 
   // 같은 학과 + 문서번호 기존 항목 제거
@@ -199,6 +213,11 @@ const body = rows.slice(start + 1).filter(r =>
     changes: [],
     uploadDate: new Date().toISOString()
   });
+
+  all = all.map(entry => ({
+    ...entry,
+    changes: (entry.changes || []).map(normalizeChange).filter(Boolean)
+  }));
 
   saveData(all);
 
@@ -308,7 +327,7 @@ else type = "변경";
 
     if (!entry.changes) entry.changes = [];
 
-    entry.changes.push({
+    const changeRecord = normalizeChange({
       year,
       type,
       subject,
@@ -319,6 +338,14 @@ else type = "변경";
       changeDocNum: docNum,
       changeDate: meetingDate || new Date().toISOString().slice(0,10)
     });
+
+    if (!changeRecord) return;
+
+    entry.changes.push(changeRecord);
+
+    entry.changes = entry.changes
+      .map(normalizeChange)
+      .filter(Boolean);
 
     entry.approved = approved;
     entry.meetingDate = meetingDate;

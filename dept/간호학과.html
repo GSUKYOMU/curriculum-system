@@ -90,6 +90,16 @@ function clean(v){
 function changeKey(change){
   return clean(change?.subject || change?.after?.name || change?.before?.name || "");
 }
+function normalizeChange(change){
+  const subject = changeKey(change);
+  if (!subject) return null;
+
+  const normalized = { ...change, subject };
+  if (change.before) normalized.before = { ...change.before, name: clean(change.before.name) };
+  if (change.after) normalized.after = { ...change.after, name: clean(change.after.name) };
+
+  return normalized;
+}
 function loadData(){
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); }
   catch { return []; }
@@ -138,8 +148,14 @@ function loadYear(){
 
   baseEntry = all[0];
 
+  const normalizedChanges = (baseEntry.changes || [])
+    .map(normalizeChange)
+    .filter(Boolean);
+
+  baseEntry._normalizedChanges = normalizedChanges;
+
   // 원본 + changes → 최종본 생성
-  finalData = buildFinal(baseEntry.data, baseEntry.changes || []);
+  finalData = buildFinal(baseEntry.data, normalizedChanges);
 
   renderTable();
 }
@@ -283,8 +299,8 @@ document.getElementById("searchInput").addEventListener("input", e=>{
    변경 상세 패널
 -------------------------- */
 function openPanel(subject){
-  const changes = baseEntry.changes || [];
-  const list = changes.filter(ch=>changeKey(ch)===clean(subject));
+  const changes = baseEntry._normalizedChanges || [];
+  const list = changes.filter(ch=>ch.subject===clean(subject));
 
   const box=document.getElementById("panelContent");
   box.innerHTML = `<h3 class="font-bold text-lg mb-2">${subject}</h3>`;
