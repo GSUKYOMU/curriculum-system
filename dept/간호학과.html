@@ -11,7 +11,6 @@
   .row-new { background:#e8ffe8; font-weight:bold; }
   .row-deleted { background:#ffe5e5; color:#9b0000; text-decoration:line-through; }
   .row-changed { background:#fff7cc; }
-  .cell-changed { background:#fff0b3; font-weight:600; }
   .sort-icon { font-size:10px; margin-left:4px; }
   #overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
   #panel {
@@ -165,16 +164,13 @@ function loadYear(){
    최종본 생성 (B 방식 핵심)
 -------------------------- */
 function buildFinal(originalRows, changes){
-  let data = JSON.parse(JSON.stringify(originalRows)).map(r => ({
-    ...r,
-    _subjectKey: clean(r["교과목명"]) || ""
-  }));
+  let data = JSON.parse(JSON.stringify(originalRows)); // 깊은복사
 
   // 삭제 / 변경 등을 표시하기 위한 map
   const mark = {};
 
   changes.forEach(ch=>{
-  const key = changeKey(ch);
+    const key = changeKey(ch);
     if (!key) return;
     const subjectName = key;
 
@@ -191,7 +187,7 @@ function buildFinal(originalRows, changes){
         "개설학년": ch.after?.grade || "",
         "개설학기": ch.after?.sem || "",
         "이수구분": ch.after?.type || "",
-      "교과목명": subjectName,
+        "교과목명": subjectName,
         "학점": ch.after?.credit || "",
         "총시수": ch.after?.total || "",
         "이론시수": ch.after?.theory || "",
@@ -232,9 +228,8 @@ function renderTable(){
   const mark = finalData._mark || {};
 
   finalData.forEach(row=>{
-    const subjectKey = clean(row._subjectKey || row["교과목명"]);
-    const info = mark[subjectKey] || {};
-    const displayName = info.displayName || row["교과목명"];
+    const name = clean(row["교과목명"]);
+    const info = mark[name] || {};
 
     const tr=document.createElement("tr");
     if(info.new) tr.classList.add("row-new");
@@ -247,37 +242,17 @@ function renderTable(){
       let td=document.createElement("td");
       td.className="border px-2 py-1";
 
-      const changeList = info.changedFields || [];
-      const fieldChanged = changeList.includes(f) || info.new || info.deleted;
-      const highlightAll = info.changed && changeList.length === 0;
-      const hasChange = fieldChanged || highlightAll;
-      if (hasChange) td.classList.add("cell-changed");
-
-      let value = row[f] || "";
-      if (f === "교과목명") value = displayName;
-
-      if(hasChange && info.detail && info.detail[f]){
-        const before = info.detail[f].before ?? "";
-        const after = info.detail[f].after ?? "";
-        value = `${before || "-"} → ${after || "-"}`;
-      }
-
       if(f==="교과목명" && (info.new||info.deleted||info.changed)){
         td.innerHTML = `
-          ${value||""}
+          ${row[f]||""}
           <span class="text-blue-600 text-xs cursor-pointer"
-                onclick="openPanel(${JSON.stringify(subjectKey)}, ${JSON.stringify(displayName)})">변경보기</span>
+                onclick="openPanel('${name}')">변경보기</span>
         `;
       } else {
-        td.textContent = value || "";
+        td.textContent = row[f] || "";
       }
       tr.appendChild(td);
     });
-
-    if (info.new || info.deleted || info.changed) {
-      tr.classList.add("cursor-pointer");
-      tr.onclick = () => openPanel(subjectKey, displayName);
-    }
 
     tbody.appendChild(tr);
   });
@@ -328,11 +303,7 @@ function openPanel(subject){
   const list = changes.filter(ch=>ch.subject===clean(subject));
 
   const box=document.getElementById("panelContent");
-  box.innerHTML = `<h3 class=\"font-bold text-lg mb-2\">${displayName || subjectKey}</h3>`;
-
-  if (!list.length) {
-    box.innerHTML += `<p class=\"text-sm text-gray-500\">변경 내역을 찾을 수 없습니다.</p>`;
-  }
+  box.innerHTML = `<h3 class="font-bold text-lg mb-2">${subject}</h3>`;
 
   list.forEach(ch=>{
     box.innerHTML += `
@@ -348,7 +319,7 @@ function openPanel(subject){
             <th class="border px-1 py-0.5">변경 후</th>
           </tr>
     `;
-    if(ch.detail && Object.keys(ch.detail).length){
+    if(ch.detail){
       Object.keys(ch.detail).forEach(k=>{
         box.innerHTML += `
           <tr>
@@ -358,12 +329,6 @@ function openPanel(subject){
           </tr>
         `;
       });
-    } else {
-      box.innerHTML += `
-        <tr>
-          <td class="border px-1 py-0.5" colspan="3">세부 변경 항목이 없습니다.</td>
-        </tr>
-      `;
     }
     box.innerHTML += `</table></div>`;
   });
