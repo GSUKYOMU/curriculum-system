@@ -232,7 +232,7 @@ function processChangeSheet(sh) {
   if (!dept) return alert("변경사유서의 학과명이 없습니다.");
 
   // 헤더 찾기
-  let start = rows.findIndex(r => r[0] === "(변경할)교육과정 연도");
+let start = rows.findIndex(r => clean(r[0]) === "(변경할)교육과정 연도");
   if (start === -1) return alert("변경사유서 헤더를 찾을 수 없습니다.");
 
   const body = rows.slice(start+1).filter(r => r.some(x => x));
