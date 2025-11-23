@@ -336,6 +336,21 @@ function renderTable(){
         value = `${before || "-"} → ${after || "-"}`;
       }
 
+      const changeList = info.changedFields || [];
+      const fieldChanged = changeList.includes(f) || info.new || info.deleted;
+      const highlightAll = info.changed && changeList.length === 0;
+      const hasChange = fieldChanged || highlightAll;
+      if (hasChange) td.classList.add("cell-changed");
+
+      let value = row[f] || "";
+      if (f === "교과목명") value = displayName;
+
+      if(hasChange && info.detail && info.detail[f]){
+        const before = info.detail[f].before ?? "";
+        const after = info.detail[f].after ?? "";
+        value = `${before || "-"} → ${after || "-"}`;
+      }
+
       if(f==="교과목명" && (info.new||info.deleted||info.changed)){
         td.innerHTML = `
           ${value||""}
