@@ -1,1 +1,206 @@
-<!DOCTYPE html> <html lang="ko"> <head> <meta charset="UTF-8"/> <meta name="viewport" content="width=device-width, initial-scale=1.0"/> <title>간호학과 입학자 교육과정 (조회 전용)</title> <!-- TailwindCSS --> <script src="https://cdn.tailwindcss.com"></script> <!-- SheetJS --> <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script> <style> .strike-delete { text-decoration: line-through; color: #d00000; font-weight: bold; } </style> </head> <body class="bg-gray-100 min-h-screen"> <div class="max-w-6xl mx-auto py-8 px-4"> <a href="../index.html" class="text-blue-600 text-sm">&larr; 메인으로</a> <h1 class="text-3xl font-bold mt-2 mb-4">간호학과 입학자 교육과정 (조회 전용)</h1> <!-- 조회 전용 안내 --> <div class="bg-white rounded-xl shadow p-4 mb-6"> <p class="text-gray-700"> 이 페이지는 <strong>조회 전용</strong>입니다.<br/> 교육과정 및 변경사유서 업로드는 <strong>index.html</strong>에서만 가능합니다. </p> </div> <!-- 과정 선택 --> <div class="bg-white rounded-xl shadow p-4 mb-6"> <h2 class="text-xl font-semibold mb-3">과정 선택</h2> <div id="trackButtons" class="flex flex-wrap gap-2"></div> </div> <!-- 입학년도 선택 및 다운로드 --> <div class="bg-white rounded-xl shadow p-4"> <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2"> <h2 class="text-xl font-semibold">입학년도별 최종 교육과정</h2> <div id="yearButtons" class="flex flex-wrap gap-2 text-sm"></div> </div> <button onclick="downloadExcel()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 mb-4 text-sm"> 📥 현재 교육과정 엑셀 다운로드 </button> <div id="noData" class="text-gray-500 text-sm hidden"> 선택한 과정 / 입학년도에 해당하는 교육과정이 없습니다. </div> <div class="overflow-x-auto"> <table class="min-w-full text-sm border" id="curriculumTable"> <thead class="bg-gray-100"> <tr> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(0)">개설학년</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(1)">개설학기</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(2)">교과목명</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(3)">학점</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(4)">총시수</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(5)">이론</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(6)">실습</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(7)">실험</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(8)">실기</th> <th class="border px-2 py-1 cursor-pointer" onclick="sortTable(9)">비고</th> </tr> </thead> <tbody id="curriculumBody"></tbody> </table> </div> </div> </div> <!-- 변경내역 패널 --> <div id="overlay" class="fixed inset-0 bg-black bg-opacity-30 hidden"></div> <div id="changePanel" class="fixed top-0 right-0 h-full w-full md:w-1/3 bg-white shadow-xl transform translate-x-full transition-transform duration-200"> <div class="p-4 border-b flex items-center justify-between"> <h3 class="text-lg font-semibold">변경 내역</h3> <button onclick="closeChangePanel()" class="text-sm text-gray-500">닫기</button> </div> <div id="changeContent" class="p-4 text-sm overflow-y-auto"></div> </div> <script> /* ------------------------- 공통 유틸 -------------------------- */ const STORAGE_KEY = "curriculumData"; const DEPT_NAME = "간호학과"; function clean(v) { return (v || "") .toString() .normalize("NFKC") .replace(/\s+/g, " ") .trim(); } function same(a, b) { return clean(a) === clean(b); } function getData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"); } catch (e) { return []; } } /* =========================================================== PART A: index.html에서 업로드한 데이터만 읽기 =========================================================== */ /* 간호학과 페이지에서는 업로드 기능 없음 → index.html에서 저장한 curriculumData만 사용 */ let selectedTrack = DEPT_NAME; let selectedYear = null; let currentEntries = []; let currentEntry = null; let sortState = {}; function initTrackButtons() { const c = document.getElementById("trackButtons"); c.innerHTML = ""; const btn = document.createElement("button"); btn.textContent = DEPT_NAME; btn.className = "px-3 py-1 rounded-full border text-sm bg-blue-600 text-white"; btn.onclick = () => { selectedTrack = DEPT_NAME; selectedYear = null; loadEntries(); }; c.appendChild(btn); } /* =========================================================== PART B: 간호학과 데이터만 필터링해서 불러오기 =========================================================== */ function loadEntries() { const all = getData(); const filtered = all.filter(d => d.dept === selectedTrack); // 동일 학년도는 가장 최신 uploadDate 기준으로 1개만 남기기 const map = {}; filtered.forEach(e => { if (!map[e.year] || map[e.year].uploadDate < e.uploadDate) { map[e.year] = e; } }); currentEntries = Object.values(map).sort((a, b) => a.year.localeCompare(b.year) ); renderYearButtons(); } /* =========================================================== PART C: 입학년도 버튼 렌더링 =========================================================== */ function renderYearButtons() { const c = document.getElementById("yearButtons"); c.innerHTML = ""; if (!currentEntries.length) { document.getElementById("noData").classList.remove("hidden"); return; } document.getElementById("noData").classList.add("hidden"); if (!selectedYear) selectedYear = currentEntries[0].year; currentEntries.forEach(e => { const btn = document.createElement("button"); btn.textContent = e.year + " 입학자"; btn.className = "px-3 py-1 rounded-full border text-sm " + (e.year === selectedYear ? "bg-indigo-600 text-white" : "bg-white text-gray-700"); if (e.changes && e.changes.length > 0) { const mark = document.createElement("span"); mark.textContent = "변경 있음"; mark.className = "text-red-500 text-xs ml-1"; btn.appendChild(mark); } btn.onclick = () => { selectedYear = e.year; renderYearButtons(); }; c.appendChild(btn); }); renderCurriculum(); } /* =========================================================== PART D: 변경내역 매핑 (과목명 기준) =========================================================== */ function buildChangeMap(changes) { const map = {}; (changes || []).forEach(ch => { const keys = [ clean(ch.subject), clean(ch.beforeName), clean(ch.afterName) ]; keys.forEach(k => { if (k) { if (!map[k]) map[k] = []; map[k].push(ch); } }); }); return map; } /* =========================================================== PART E: 교육과정 테이블 렌더링 =========================================================== */ function renderCurriculum() { currentEntry = currentEntries.find(e => e.year === selectedYear); const tbody = document.getElementById("curriculumBody"); tbody.innerHTML = ""; if (!currentEntry) return; const changes = currentEntry.changes || []; const changeMap = buildChangeMap(changes); (currentEntry.data || []).forEach(row => { let subject = clean(row["교과목명"]); const changed = !!changeMap[subject]; const isDeleted = row._deleted; const tr = document.createElement("tr"); const cells = [ row["개설학년"], row["개설학기"], row["교과목명"], row["학점"], row["총시수"], row["이론시수"], row["실습시수"], row["실험시수"], row["실기시수"], row["비고"] ]; cells.forEach((v, idx) => { const td = document.createElement("td"); td.className = "border px-2 py-1 whitespace-nowrap"; if (idx === 2) { if (isDeleted) { td.innerHTML = <span class="strike-delete">${v} (삭제됨)</span>; } else if (changed) { td.innerHTML = <button class="bg-yellow-100 border border-yellow-300 text-yellow-800 text-xs px-2 py-0.5 rounded-full" onclick="openChangePanel('${subject}')">${v} 변경내역</button>; } else { td.textContent = v || ""; } } else { if (isDeleted) td.classList.add("strike-delete"); td.textContent = v || ""; } tr.appendChild(td); }); if (changed && !isDeleted) tr.classList.add("bg-yellow-50"); tbody.appendChild(tr); }); } /* =========================================================== PART F: 정렬 기능 =========================================================== */ function sortTable(colIndex) { if (!currentEntry) return; const current = sortState[colIndex] || "asc"; const next = current === "asc" ? "desc" : "asc"; sortState[colIndex] = next; const keys = [ "개설학년","개설학기","교과목명","학점","총시수", "이론시수","실습시수","실험시수","실기시수","비고" ]; const key = keys[colIndex]; currentEntry.data.sort((a, b) => { let v1 = a[key] ?? ""; let v2 = b[key] ?? ""; const n1 = parseFloat(v1); const n2 = parseFloat(v2); if (!isNaN(n1) && !isNaN(n2)) { return next === "asc" ? n1 - n2 : n2 - n1; } return next === "asc" ? clean(v1).localeCompare(clean(v2)) : clean(v2).localeCompare(clean(v1)); }); renderCurriculum(); } /* =========================================================== PART G: 변경내역 패널 =========================================================== */ function openChangePanel(subjectKey) { const norm = clean(subjectKey); const entries = (currentEntry.changes || []).filter(ch => { return same(ch.subject, norm) || same(ch.beforeName, norm) || same(ch.afterName, norm); }); const content = document.getElementById("changeContent"); content.innerHTML = <h4 class="font-semibold mb-3">교과목: ${subjectKey}</h4>; entries.forEach(ch => { let typeLabel = ""; if (ch.type === "추가") { typeLabel = <p class="text-green-700 font-semibold mb-2">🆕 신규 개설</p>; } else if (ch.type === "삭제") { typeLabel = <p class="text-red-700 font-semibold mb-2">❌ 삭제됨</p>; } else { typeLabel = <p class="text-amber-700 font-semibold mb-2">✏️ 내용 변경</p>; } let detailHTML = ""; if (ch.detail && Object.keys(ch.detail).length > 0) { detailHTML += <table class="text-xs w-full border mb-3"> <thead> <tr class="bg-gray-100"> <th class="border px-1 py-0.5">항목</th> <th class="border px-1 py-0.5">변경 전</th> <th class="border px-1 py-0.5">변경 후</th> </tr> </thead> <tbody>; Object.keys(ch.detail).forEach(k => { detailHTML += <tr> <td class="border px-1 py-0.5">${k}</td> <td class="border px-1 py-0.5">${ch.detail[k].before || ""}</td> <td class="border px-1 py-0.5">${ch.detail[k].after || ""}</td> </tr>; }); detailHTML += "</tbody></table>"; } content.innerHTML += <div class="mb-4 pb-4 border-b"> ${typeLabel} ${detailHTML} <p class="text-xs text-gray-600 mt-2">📄 변경사유:</p> <p class="text-xs mb-2">${ch.reason || "-"}</p> <p class="text-xs text-gray-500">문서번호: ${ch.changeDocNum || "-"}</p> <p class="text-xs text-gray-500">회의일: ${ch.changeDate || "-"}</p> </div> ; }); document.getElementById("overlay").classList.remove("hidden"); document.getElementById("changePanel").classList.remove("translate-x-full"); document.getElementById("overlay").onclick = closeChangePanel; } function closeChangePanel() { document.getElementById("overlay").classList.add("hidden"); document.getElementById("changePanel").classList.add("translate-x-full"); } /* =========================================================== PART H: Excel 다운로드 =========================================================== */ function downloadExcel() { if (!currentEntry) { alert("다운로드할 교육과정이 없습니다."); return; } const wb = XLSX.utils.book_new(); const rows = [ ["학과명", currentEntry.dept], ["입학년도", currentEntry.year], ["문서번호", currentEntry.docNum], ["교육과정위원회 확정여부", currentEntry.approved ? "확정" : "미확정"], ["교육과정위원회 개최일", currentEntry.meetingDate || ""], [], [ "개설학년","개설학기","교과목명", "학점","총시수","이론시수","실습시수","실험시수","실기시수","비고" ] ]; (currentEntry.data || []).forEach(r => { rows.push([ r["개설학년"], r["개설학기"], r["교과목명"], r["학점"], r["총시수"], r["이론시수"], r["실습시수"], r["실험시수"], r["실기시수"], r["비고"] ]); }); const ws = XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb, ws, "교육과정"); const filename = ${currentEntry.dept}_${currentEntry.year}_입학자교육과정.xlsx; XLSX.writeFile(wb, filename); } /* =========================================================== PART I: 초기 실행 =========================================================== */ document.addEventListener("DOMContentLoaded", () => { initTrackButtons(); loadEntries(); }); </script> </body> </html>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>간호학과 입학자 교육과정 (완성본)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<style>
+.changed-row { background:#fff7c2; }
+.new-row { background:#e6ffe6; font-weight:bold; }
+.deleted-row { background:#ffe6e6; text-decoration: line-through; color:#b30000; }
+.badge { background:#f59e0b; color:white; padding:2px 6px; border-radius:12px; font-size:10px; margin-left:4px; }
+.sort-icon { font-size:10px; margin-left:4px; }
+#panel { position:fixed; top:0; right:0; width:350px; height:100%; background:white; box-shadow:-2px 0 5px rgba(0,0,0,0.2); transform:translateX(100%); transition:0.2s; overflow-y:auto; }
+#overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
+</style>
+</head>
+
+<body class="bg-gray-100">
+
+<div id="overlay" onclick="closePanel()"></div>
+<div id="panel">
+  <div class="p-4 border-b flex justify-between">
+    <h2 class="font-bold">변경 상세</h2>
+    <button onclick="closePanel()">닫기</button>
+  </div>
+  <div id="panelContent" class="p-4 text-sm"></div>
+</div>
+
+<div class="max-w-4xl mx-auto bg-white p-6 mt-6 rounded-xl shadow">
+<a href="../index.html" class="text-blue-600 text-sm">← 메인으로</a>
+<h1 class="text-3xl font-bold mt-2 mb-4">간호학과 입학자 교육과정</h1>
+
+<input id="searchInput" type="text" placeholder="과목명 검색..." class="border p-2 rounded w-full mb-4"/>
+
+<div id="yearButtons" class="flex flex-wrap gap-2 mb-4"></div>
+
+<div class="overflow-x-auto">
+<table class="min-w-full text-sm border">
+<thead class="bg-gray-100">
+<tr>
+<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('개설학년')">개설학년 <span id="s-개설학년" class="sort-icon"></span></th>
+<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('개설학기')">개설학기 <span id="s-개설학기" class="sort-icon"></span></th>
+<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('교과목명')">교과목명 <span id="s-교과목명" class="sort-icon"></span></th>
+<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('학점')">학점 <span id="s-학점" class="sort-icon"></span></th>
+<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('총시수')">총시수 <span id="s-총시수" class="sort-icon"></span></th>
+<th class="border px-2 py-1">이론</th>
+<th class="border px-2 py-1">실습</th>
+<th class="border px-2 py-1">실험</th>
+<th class="border px-2 py-1">실기</th>
+</tr>
+</thead>
+<tbody id="tbody"></tbody>
+</table>
+</div>
+</div>
+
+<script>
+const STORAGE_KEY="curriculumData";
+let selectedYear=null;
+let currentEntry=null;
+let sortState={};
+
+function clean(v){ return (v||"").toString().trim(); }
+
+function loadData(){
+ try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); }
+ catch(e){ return []; }
+}
+
+function init(){
+ const all=loadData().filter(d=>d.dept==="간호학과");
+ const years=[...new Set(all.map(e=>e.year))].sort();
+ const c=document.getElementById("yearButtons");
+
+ years.forEach(y=>{
+   const btn=document.createElement("button");
+   btn.textContent=y+" 입학자";
+   btn.className="px-3 py-1 border rounded";
+   btn.onclick=()=>{ selectedYear=y; render(); };
+   c.appendChild(btn);
+ });
+
+ if(years.length>0) selectedYear=years[0];
+ render();
+}
+
+function sortTable(field){
+ const icon=document.getElementById("s-"+field);
+ const current=sortState[field]||"none";
+ const next=current==="none"?"asc":current==="asc"?"desc":"none";
+ sortState[field]=next;
+
+ Object.keys(sortState).forEach(k=>{
+   document.getElementById("s-"+k).textContent="";
+ });
+
+ icon.textContent= next==="asc"?"▲":next==="desc"?"▼":"";
+
+ if(!currentEntry) return;
+
+ if(next==="none"){ render(); return; }
+
+ currentEntry.data.sort((a,b)=>{
+   let v1=a[field]||""; let v2=b[field]||"";
+   let n1=parseFloat(v1), n2=parseFloat(v2);
+   if(!isNaN(n1)&&!isNaN(n2)) return next==="asc"?n1-n2:n2-n1;
+   return next==="asc"?v1.localeCompare(v2):v2.localeCompare(v1);
+ });
+
+ renderTableOnly();
+}
+
+function render(){
+ const all=loadData().filter(d=>d.dept==="간호학과" && d.year===selectedYear);
+ if(!all.length) return;
+ all.sort((a,b)=> new Date(b.uploadDate)-new Date(a.uploadDate));
+ currentEntry=all[0];
+ renderTableOnly();
+}
+
+function renderTableOnly(){
+ const tbody=document.getElementById("tbody");
+ tbody.innerHTML="";
+ const changes=currentEntry.changes||[];
+ const map={};
+
+ changes.forEach(ch=>{
+   const key=clean(ch.subject);
+   if(!map[key]) map[key]=[];
+   map[key].push(ch);
+ });
+
+ currentEntry.data.forEach(row=>{
+   const name=clean(row["교과목명"]);
+   let tr=document.createElement("tr");
+
+   let detail=map[name];
+   if(detail){
+     tr.classList.add("changed-row");
+   }
+
+   const fields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+   fields.forEach(f=>{
+     let td=document.createElement("td");
+     td.className="border px-2 py-1";
+
+     if(f==="교과목명" && detail){
+       td.innerHTML = \`\${row[f]} <span class="text-blue-600 text-xs cursor-pointer" onclick="openPanel('\${name}')">변경보기</span>\`;
+     } else {
+       td.textContent=row[f]||"";
+     }
+     tr.appendChild(td);
+   });
+
+   tbody.appendChild(tr);
+ });
+}
+
+// 검색
+document.getElementById("searchInput").addEventListener("input", e=>{
+ const v=e.target.value.toLowerCase();
+ [...document.querySelectorAll("#tbody tr")].forEach(tr=>{
+   tr.style.display= tr.textContent.toLowerCase().includes(v)?"":"none";
+ });
+});
+
+function openPanel(name){
+ const changes=currentEntry.changes||[];
+ const items=changes.filter(ch=> clean(ch.subject)===clean(name));
+ const box=document.getElementById("panelContent");
+ box.innerHTML="<h3 class='font-bold mb-2'>"+name+"</h3>";
+
+ items.forEach(ch=>{
+   box.innerHTML+=\`
+     <div class='mb-3 border-b pb-2'>
+       <p class='font-semibold'>유형: \${ch.type}</p>
+       <p>사유: \${ch.reason||"-"}</p>
+       <p>문서번호: \${ch.changeDocNum||"-"}</p>
+       <p>회의일: \${ch.changeDate||"-"}</p>
+       <table class='mt-2 text-xs w-full border'>
+         <tr class='bg-gray-100'><th class='border px-1'>항목</th><th class='border px-1'>전</th><th class='border px-1'>후</th></tr>
+   \`;
+   if(ch.detail){
+     Object.keys(ch.detail).forEach(k=>{
+       box.innerHTML+=\`<tr><td class='border px-1'>\${k}</td><td class='border px-1'>\${ch.detail[k].before}</td><td class='border px-1'>\${ch.detail[k].after}</td></tr>\`;
+     });
+   }
+   box.innerHTML+="</table></div>";
+ });
+
+ document.getElementById("overlay").style.display="block";
+ document.getElementById("panel").style.transform="translateX(0)";
+}
+
+function closePanel(){
+ document.getElementById("overlay").style.display="none";
+ document.getElementById("panel").style.transform="translateX(100%)";
+}
+
+document.addEventListener("DOMContentLoaded", init);
+</script>
+
+</body>
+</html>
