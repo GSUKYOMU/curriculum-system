@@ -81,7 +81,32 @@ let finalData = [];    // 변경 반영 최종본
 let sortState = {};
 
 function clean(v){
-  return (v||"").toString().trim();
+  return (v || "")
+    .toString()
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function changeKey(change){
+  const type = clean(change?.type);
+  const afterName = clean(change?.after?.name);
+  const beforeName = clean(change?.before?.name);
+
+  if (type === "신규") return afterName;
+  if (type === "폐지") return beforeName;
+  if (type === "변경") return beforeName || afterName;
+
+  return clean(change?.subject || afterName || beforeName || "");
+}
+function normalizeChange(change){
+  const subject = changeKey(change);
+  if (!subject) return null;
+
+  const normalized = { ...change, subject };
+  if (change.before) normalized.before = { ...change.before, name: clean(change.before.name) };
+  if (change.after) normalized.after = { ...change.after, name: clean(change.after.name) };
+
+  return normalized;
 }
 function loadData(){
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); }
@@ -131,8 +156,14 @@ function loadYear(){
 
   baseEntry = all[0];
 
+  const normalizedChanges = (baseEntry.changes || [])
+    .map(normalizeChange)
+    .filter(Boolean);
+
+  baseEntry._normalizedChanges = normalizedChanges;
+
   // 원본 + changes → 최종본 생성
-  finalData = buildFinal(baseEntry.data, baseEntry.changes || []);
+  finalData = buildFinal(baseEntry.data, normalizedChanges);
 
   renderTable();
 }
@@ -147,39 +178,41 @@ function buildFinal(originalRows, changes){
   const mark = {};
 
   changes.forEach(ch=>{
-    const key = clean(ch.subject);
+    const key = changeKey(ch);
+    if (!key) return;
+    const subjectName = key;
 
     if(ch.type==="폐지"){
-      const idx = data.findIndex(r => clean(r["교과목명"])===key);
+      const idx = data.findIndex(r => clean(r["교과목명"])===subjectName);
       if(idx>-1){
-        mark[key] = mark[key]||{};
-        mark[key].deleted = true;
+        mark[subjectName] = mark[subjectName]||{};
+        mark[subjectName].deleted = true;
       }
     }
     else if(ch.type==="신규"){
       // 신규는 원본에 없으므로 별도 push
       const newRow = {
-        "개설학년": ch.after.grade || "",
-        "개설학기": ch.after.sem || "",
-        "이수구분": ch.after.type || "",
-        "교과목명": ch.after.name || "",
-        "학점": ch.after.credit || "",
-        "총시수": ch.after.total || "",
-        "이론시수": ch.after.theory || "",
-        "실습시수": ch.after.practice || "",
-        "실험시수": ch.after.experiment || "",
-        "실기시수": ch.after.skill || ""
+        "개설학년": ch.after?.grade || "",
+        "개설학기": ch.after?.sem || "",
+        "이수구분": ch.after?.type || "",
+        "교과목명": subjectName,
+        "학점": ch.after?.credit || "",
+        "총시수": ch.after?.total || "",
+        "이론시수": ch.after?.theory || "",
+        "실습시수": ch.after?.practice || "",
+        "실험시수": ch.after?.experiment || "",
+        "실기시수": ch.after?.skill || ""
       };
-      mark[key] = mark[key]||{};
-      mark[key].new = true;
+      mark[subjectName] = mark[subjectName]||{};
+      mark[subjectName].new = true;
 
       data.push(newRow);
     }
     else if(ch.type==="변경"){
-      const idx = data.findIndex(r => clean(r["교과목명"])===key);
+      const idx = data.findIndex(r => clean(r["교과목명"])===subjectName);
       if(idx>-1){
-        mark[key] = mark[key]||{};
-        mark[key].changed = true;
+        mark[subjectName] = mark[subjectName]||{};
+        mark[subjectName].changed = true;
 
         // 표시만 하고 실제 데이터는 변경하지 않는다(B 방식)
       }
@@ -274,8 +307,8 @@ document.getElementById("searchInput").addEventListener("input", e=>{
    변경 상세 패널
 -------------------------- */
 function openPanel(subject){
-  const changes = baseEntry.changes || [];
-  const list = changes.filter(ch=>clean(ch.subject)===clean(subject));
+  const changes = baseEntry._normalizedChanges || [];
+  const list = changes.filter(ch=>ch.subject===clean(subject));
 
   const box=document.getElementById("panelContent");
   box.innerHTML = `<h3 class="font-bold text-lg mb-2">${subject}</h3>`;
