@@ -229,6 +229,15 @@ function buildFinal(originalRows, changes){
     _subjectKey: clean(r["교과목명"]) || ""
   }));
 
+  const subjectLookup = () => {
+    const map = new Map();
+    data.forEach((row, idx) => {
+      const key = clean(row._subjectKey || row["교과목명"]);
+      if (key) map.set(key, idx);
+    });
+    return map;
+  };
+
   // 삭제 / 변경 등을 표시하기 위한 map
   const mark = {};
 
@@ -237,6 +246,17 @@ function buildFinal(originalRows, changes){
     if (!subjectKey) return;
 
     const displayName = clean(ch.after?.name) || clean(ch.before?.name) || subjectKey;
+    const map = subjectLookup();
+    const findIdx = () => {
+      const keys = [subjectKey, clean(ch.before?.name), clean(ch.after?.name)].filter(Boolean);
+      for (const k of keys) {
+        if (map.has(k)) return map.get(k);
+      }
+      return -1;
+    };
+
+    let matchedKey = subjectKey;
+
     mark[subjectKey] = mark[subjectKey] || { subjectKey, changes: [] };
     const info = mark[subjectKey];
 
@@ -256,9 +276,11 @@ function buildFinal(originalRows, changes){
     info.changes.push(ch);
 
     if(ch.type==="폐지"){
-      const idx = data.findIndex(r => clean(r._subjectKey||r["교과목명"])===subjectKey);
+      const idx = findIdx();
       if(idx>-1){
+        matchedKey = clean(data[idx]._subjectKey || data[idx]["교과목명"]);
         info.deleted = true;
+        mark[matchedKey] = info;
       }
     }
     else if(ch.type==="신규"){
@@ -281,8 +303,9 @@ function buildFinal(originalRows, changes){
       data.push(newRow);
     }
     else if(ch.type==="변경"){
-      const idx = data.findIndex(r => clean(r._subjectKey||r["교과목명"])===subjectKey);
+      const idx = findIdx();
       if(idx>-1){
+        matchedKey = clean(data[idx]._subjectKey || data[idx]["교과목명"]);
         info.changed = true;
 
         const updated = { ...data[idx] };
@@ -304,6 +327,7 @@ function buildFinal(originalRows, changes){
 
         const changedFields = Object.keys(ch.detail || {});
         info.changedFields = Array.from(new Set([...(info.changedFields||[]), ...changedFields]));
+        mark[matchedKey] = info;
       }
     }
   });
