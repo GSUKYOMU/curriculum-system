@@ -89,15 +89,7 @@ function clean(v){
     .trim();
 }
 function changeKey(change){
-  const type = clean(change?.type);
-  const afterName = clean(change?.after?.name);
-  const beforeName = clean(change?.before?.name);
-
-  if (type === "신규") return afterName;
-  if (type === "폐지") return beforeName;
-  if (type === "변경") return beforeName || afterName;
-
-  return clean(change?.subject || afterName || beforeName || "");
+  return clean(change?.subject || change?.after?.name || change?.before?.name || "");
 }
 function normalizeChange(change){
   const subject = changeKey(change);
@@ -182,32 +174,15 @@ function buildFinal(originalRows, changes){
   const mark = {};
 
   changes.forEach(ch=>{
-    const subjectKey = changeKey(ch);
-    if (!subjectKey) return;
-
-    const displayName = clean(ch.after?.name) || clean(ch.before?.name) || subjectKey;
-    mark[subjectKey] = mark[subjectKey] || { subjectKey, changes: [] };
-    const info = mark[subjectKey];
-
-    info.type = ch.type;
-    info.displayName = displayName;
-    info.reason = ch.reason;
-    info.changeDocNum = ch.changeDocNum;
-    info.changeDate = ch.changeDate;
-    info.detail = info.detail || {};
-    if (ch.detail) {
-      Object.entries(ch.detail).forEach(([label, diff]) => {
-        info.detail[label] = diff;
-      });
-    }
-    info.before = ch.before;
-    info.after = ch.after;
-    info.changes.push(ch);
+  const key = changeKey(ch);
+    if (!key) return;
+    const subjectName = key;
 
     if(ch.type==="폐지"){
-      const idx = data.findIndex(r => clean(r._subjectKey||r["교과목명"])===subjectKey);
+      const idx = data.findIndex(r => clean(r["교과목명"])===subjectName);
       if(idx>-1){
-        info.deleted = true;
+        mark[subjectName] = mark[subjectName]||{};
+        mark[subjectName].deleted = true;
       }
     }
     else if(ch.type==="신규"){
@@ -216,43 +191,26 @@ function buildFinal(originalRows, changes){
         "개설학년": ch.after?.grade || "",
         "개설학기": ch.after?.sem || "",
         "이수구분": ch.after?.type || "",
-        "교과목명": displayName,
+      "교과목명": subjectName,
         "학점": ch.after?.credit || "",
         "총시수": ch.after?.total || "",
         "이론시수": ch.after?.theory || "",
         "실습시수": ch.after?.practice || "",
         "실험시수": ch.after?.experiment || "",
-        "실기시수": ch.after?.skill || "",
-        _subjectKey: subjectKey
+        "실기시수": ch.after?.skill || ""
       };
-      info.new = true;
+      mark[subjectName] = mark[subjectName]||{};
+      mark[subjectName].new = true;
 
       data.push(newRow);
     }
     else if(ch.type==="변경"){
-      const idx = data.findIndex(r => clean(r._subjectKey||r["교과목명"])===subjectKey);
+      const idx = data.findIndex(r => clean(r["교과목명"])===subjectName);
       if(idx>-1){
-        info.changed = true;
+        mark[subjectName] = mark[subjectName]||{};
+        mark[subjectName].changed = true;
 
-        const updated = { ...data[idx] };
-        const fieldMap = {
-          grade:"개설학년", sem:"개설학기", type:"이수구분", name:"교과목명",
-          credit:"학점", total:"총시수", theory:"이론시수", practice:"실습시수",
-          experiment:"실험시수", skill:"실기시수"
-        };
-
-        Object.entries(fieldMap).forEach(([key,label])=>{
-          const val = ch.after?.[key];
-          if (val !== undefined && val !== null && clean(val) !== "") {
-            updated[label] = key === "name" ? displayName : val;
-          }
-        });
-
-        updated._subjectKey = subjectKey;
-        data[idx] = updated;
-
-        const changedFields = Object.keys(ch.detail || {});
-        info.changedFields = Array.from(new Set([...(info.changedFields||[]), ...changedFields]));
+        // 표시만 하고 실제 데이터는 변경하지 않는다(B 방식)
       }
     }
   });
@@ -365,9 +323,9 @@ document.getElementById("searchInput").addEventListener("input", e=>{
 /* --------------------------
    변경 상세 패널
 -------------------------- */
-function openPanel(subjectKey, displayName){
+function openPanel(subject){
   const changes = baseEntry._normalizedChanges || [];
-  const list = changes.filter(ch=>ch.subject===clean(subjectKey));
+  const list = changes.filter(ch=>ch.subject===clean(subject));
 
   const box=document.getElementById("panelContent");
   box.innerHTML = `<h3 class=\"font-bold text-lg mb-2\">${displayName || subjectKey}</h3>`;
