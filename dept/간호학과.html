@@ -4,202 +4,319 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>간호학과 입학자 교육과정 (완성본)</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-<style>
-.changed-row { background:#fff7c2; }
-.new-row { background:#e6ffe6; font-weight:bold; }
-.deleted-row { background:#ffe6e6; text-decoration: line-through; color:#b30000; }
-.badge { background:#f59e0b; color:white; padding:2px 6px; border-radius:12px; font-size:10px; margin-left:4px; }
-.sort-icon { font-size:10px; margin-left:4px; }
-#panel { position:fixed; top:0; right:0; width:350px; height:100%; background:white; box-shadow:-2px 0 5px rgba(0,0,0,0.2); transform:translateX(100%); transition:0.2s; overflow-y:auto; }
-#overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
-</style>
-</head>
 
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+  .row-new { background:#e8ffe8; font-weight:bold; }
+  .row-deleted { background:#ffe5e5; color:#9b0000; text-decoration:line-through; }
+  .row-changed { background:#fff7cc; }
+  .sort-icon { font-size:10px; margin-left:4px; }
+  #overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
+  #panel {
+    position:fixed; top:0; right:0; width:360px; height:100%;
+    background:white; transform:translateX(100%);
+    box-shadow:-2px 0 5px rgba(0,0,0,0.2); transition:0.2s;
+    overflow-y:auto;
+  }
+</style>
+
+</head>
 <body class="bg-gray-100">
 
+<!-- overlay -->
 <div id="overlay" onclick="closePanel()"></div>
+
+<!-- side panel -->
 <div id="panel">
-  <div class="p-4 border-b flex justify-between">
-    <h2 class="font-bold">변경 상세</h2>
-    <button onclick="closePanel()">닫기</button>
+  <div class="p-4 border-b flex justify-between items-center">
+    <h2 class="font-bold text-lg">변경 상세</h2>
+    <button onclick="closePanel()" class="text-sm text-gray-600">닫기</button>
   </div>
   <div id="panelContent" class="p-4 text-sm"></div>
 </div>
 
-<div class="max-w-4xl mx-auto bg-white p-6 mt-6 rounded-xl shadow">
+<div class="max-w-5xl mx-auto bg-white p-6 mt-6 rounded-xl shadow">
+
 <a href="../index.html" class="text-blue-600 text-sm">← 메인으로</a>
 <h1 class="text-3xl font-bold mt-2 mb-4">간호학과 입학자 교육과정</h1>
 
-<input id="searchInput" type="text" placeholder="과목명 검색..." class="border p-2 rounded w-full mb-4"/>
+<!-- 검색 -->
+<input id="searchInput" type="text" placeholder="과목명 검색..." 
+       class="border p-2 rounded w-full mb-4"/>
 
+<!-- 연도 버튼 -->
 <div id="yearButtons" class="flex flex-wrap gap-2 mb-4"></div>
 
+<!-- 표 -->
 <div class="overflow-x-auto">
 <table class="min-w-full text-sm border">
 <thead class="bg-gray-100">
 <tr>
-<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('개설학년')">개설학년 <span id="s-개설학년" class="sort-icon"></span></th>
-<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('개설학기')">개설학기 <span id="s-개설학기" class="sort-icon"></span></th>
-<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('교과목명')">교과목명 <span id="s-교과목명" class="sort-icon"></span></th>
-<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('학점')">학점 <span id="s-학점" class="sort-icon"></span></th>
-<th class="border px-2 py-1 cursor-pointer" onclick="sortTable('총시수')">총시수 <span id="s-총시수" class="sort-icon"></span></th>
-<th class="border px-2 py-1">이론</th>
-<th class="border px-2 py-1">실습</th>
-<th class="border px-2 py-1">실험</th>
-<th class="border px-2 py-1">실기</th>
+  <th class="border px-2 py-1 cursor-pointer" onclick="sortTable('개설학년')">개설학년 <span id="s-개설학년" class="sort-icon"></span></th>
+  <th class="border px-2 py-1 cursor-pointer" onclick="sortTable('개설학기')">개설학기 <span id="s-개설학기" class="sort-icon"></span></th>
+  <th class="border px-2 py-1 cursor-pointer" onclick="sortTable('교과목명')">교과목명 <span id="s-교과목명" class="sort-icon"></span></th>
+  <th class="border px-2 py-1 cursor-pointer" onclick="sortTable('학점')">학점 <span id="s-학점" class="sort-icon"></span></th>
+  <th class="border px-2 py-1 cursor-pointer" onclick="sortTable('총시수')">총시수 <span id="s-총시수" class="sort-icon"></span></th>
+  <th class="border px-2 py-1">이론</th>
+  <th class="border px-2 py-1">실습</th>
+  <th class="border px-2 py-1">실험</th>
+  <th class="border px-2 py-1">실기</th>
 </tr>
 </thead>
 <tbody id="tbody"></tbody>
 </table>
 </div>
+
 </div>
 
 <script>
-const STORAGE_KEY="curriculumData";
-let selectedYear=null;
-let currentEntry=null;
-let sortState={};
+/* --------------------------
+   공통 함수
+-------------------------- */
+const STORAGE_KEY = "curriculumData";
+let selectedYear = null;
+let baseEntry = null;  // 원본
+let finalData = [];    // 변경 반영 최종본
+let sortState = {};
 
-function clean(v){ return (v||"").toString().trim(); }
-
-function loadData(){
- try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); }
- catch(e){ return []; }
+function clean(v){
+  return (v||"").toString().trim();
 }
+function loadData(){
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); }
+  catch { return []; }
+}
+
+/* --------------------------
+   초기 로드
+-------------------------- */
+document.addEventListener("DOMContentLoaded", init);
 
 function init(){
- const all=loadData().filter(d=>d.dept==="간호학과");
- const years=[...new Set(all.map(e=>e.year))].sort();
- const c=document.getElementById("yearButtons");
+  const raw = loadData().filter(d => clean(d.dept)==="간호학과");
 
- years.forEach(y=>{
-   const btn=document.createElement("button");
-   btn.textContent=y+" 입학자";
-   btn.className="px-3 py-1 border rounded";
-   btn.onclick=()=>{ selectedYear=y; render(); };
-   c.appendChild(btn);
- });
+  if(!raw.length){
+    alert("간호학과 데이터가 없습니다. 먼저 업로드 해주세요.");
+    return;
+  }
 
- if(years.length>0) selectedYear=years[0];
- render();
+  const years=[...new Set(raw.map(e=>clean(e.year)))].sort();
+  const wrap=document.getElementById("yearButtons");
+
+  years.forEach(y=>{
+    const btn=document.createElement("button");
+    btn.textContent=y+" 입학자";
+    btn.className="px-3 py-1 rounded border";
+    btn.onclick=()=>{ selectedYear=y; loadYear(); };
+    wrap.appendChild(btn);
+  });
+
+  selectedYear = years[0];
+  loadYear();
 }
 
+/* --------------------------
+   해당연도 데이터 불러오기
+-------------------------- */
+function loadYear(){
+  const all=loadData()
+    .filter(d => clean(d.dept)==="간호학과" && clean(d.year)===clean(selectedYear))
+    .sort((a,b)=> new Date(b.uploadDate)-new Date(a.uploadDate));
+
+  if(!all.length){
+    alert("해당 연도 데이터가 없습니다.");
+    return;
+  }
+
+  baseEntry = all[0];
+
+  // 원본 + changes → 최종본 생성
+  finalData = buildFinal(baseEntry.data, baseEntry.changes || []);
+
+  renderTable();
+}
+
+/* --------------------------
+   최종본 생성 (B 방식 핵심)
+-------------------------- */
+function buildFinal(originalRows, changes){
+  let data = JSON.parse(JSON.stringify(originalRows)); // 깊은복사
+
+  // 삭제 / 변경 등을 표시하기 위한 map
+  const mark = {};
+
+  changes.forEach(ch=>{
+    const key = clean(ch.subject);
+
+    if(ch.type==="폐지"){
+      const idx = data.findIndex(r => clean(r["교과목명"])===key);
+      if(idx>-1){
+        mark[key] = mark[key]||{};
+        mark[key].deleted = true;
+      }
+    }
+    else if(ch.type==="신규"){
+      // 신규는 원본에 없으므로 별도 push
+      const newRow = {
+        "개설학년": ch.after.grade || "",
+        "개설학기": ch.after.sem || "",
+        "이수구분": ch.after.type || "",
+        "교과목명": ch.after.name || "",
+        "학점": ch.after.credit || "",
+        "총시수": ch.after.total || "",
+        "이론시수": ch.after.theory || "",
+        "실습시수": ch.after.practice || "",
+        "실험시수": ch.after.experiment || "",
+        "실기시수": ch.after.skill || ""
+      };
+      mark[key] = mark[key]||{};
+      mark[key].new = true;
+
+      data.push(newRow);
+    }
+    else if(ch.type==="변경"){
+      const idx = data.findIndex(r => clean(r["교과목명"])===key);
+      if(idx>-1){
+        mark[key] = mark[key]||{};
+        mark[key].changed = true;
+
+        // 표시만 하고 실제 데이터는 변경하지 않는다(B 방식)
+      }
+    }
+  });
+
+  // 화면 렌더링 시 사용하기 위해 mark 보관
+  finalData._mark = mark;
+
+  // 정렬을 위해 기본 정렬
+  return data;
+}
+
+/* --------------------------
+   테이블 렌더링
+-------------------------- */
+function renderTable(){
+  const tbody=document.getElementById("tbody");
+  tbody.innerHTML="";
+
+  const mark = finalData._mark || {};
+
+  finalData.forEach(row=>{
+    const name = clean(row["교과목명"]);
+    const info = mark[name] || {};
+
+    const tr=document.createElement("tr");
+    if(info.new) tr.classList.add("row-new");
+    else if(info.deleted) tr.classList.add("row-deleted");
+    else if(info.changed) tr.classList.add("row-changed");
+
+    const fields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+
+    fields.forEach(f=>{
+      let td=document.createElement("td");
+      td.className="border px-2 py-1";
+
+      if(f==="교과목명" && (info.new||info.deleted||info.changed)){
+        td.innerHTML = `
+          ${row[f]||""}
+          <span class="text-blue-600 text-xs cursor-pointer"
+                onclick="openPanel('${name}')">변경보기</span>
+        `;
+      } else {
+        td.textContent = row[f] || "";
+      }
+      tr.appendChild(td);
+    });
+
+    tbody.appendChild(tr);
+  });
+}
+
+/* --------------------------
+   정렬
+-------------------------- */
 function sortTable(field){
- const icon=document.getElementById("s-"+field);
- const current=sortState[field]||"none";
- const next=current==="none"?"asc":current==="asc"?"desc":"none";
- sortState[field]=next;
+  const icon=document.getElementById("s-"+field);
+  const current=sortState[field]||"none";
+  const next=current==="none"?"asc":current==="asc"?"desc":"none";
+  sortState[field]=next;
 
- Object.keys(sortState).forEach(k=>{
-   document.getElementById("s-"+k).textContent="";
- });
+  Object.keys(sortState).forEach(k=>{
+    const ic=document.getElementById("s-"+k);
+    if(ic) ic.textContent="";
+  });
+  icon.textContent = next==="asc"?"▲":next==="desc"?"▼":"";
 
- icon.textContent= next==="asc"?"▲":next==="desc"?"▼":"";
+  if(next==="none"){ loadYear(); return; }
 
- if(!currentEntry) return;
+  finalData.sort((a,b)=>{
+    let v1=a[field]||"", v2=b[field]||"";
+    let n1=parseFloat(v1), n2=parseFloat(v2);
+    if(!isNaN(n1)&&!isNaN(n2)) return next==="asc"?n1-n2:n2-n1;
+    return next==="asc"?v1.localeCompare(v2):v2.localeCompare(v1);
+  });
 
- if(next==="none"){ render(); return; }
-
- currentEntry.data.sort((a,b)=>{
-   let v1=a[field]||""; let v2=b[field]||"";
-   let n1=parseFloat(v1), n2=parseFloat(v2);
-   if(!isNaN(n1)&&!isNaN(n2)) return next==="asc"?n1-n2:n2-n1;
-   return next==="asc"?v1.localeCompare(v2):v2.localeCompare(v1);
- });
-
- renderTableOnly();
+  renderTable();
 }
 
-function render(){
- const all=loadData().filter(d=>d.dept==="간호학과" && d.year===selectedYear);
- if(!all.length) return;
- all.sort((a,b)=> new Date(b.uploadDate)-new Date(a.uploadDate));
- currentEntry=all[0];
- renderTableOnly();
-}
-
-function renderTableOnly(){
- const tbody=document.getElementById("tbody");
- tbody.innerHTML="";
- const changes=currentEntry.changes||[];
- const map={};
-
- changes.forEach(ch=>{
-   const key=clean(ch.subject);
-   if(!map[key]) map[key]=[];
-   map[key].push(ch);
- });
-
- currentEntry.data.forEach(row=>{
-   const name=clean(row["교과목명"]);
-   let tr=document.createElement("tr");
-
-   let detail=map[name];
-   if(detail){
-     tr.classList.add("changed-row");
-   }
-
-   const fields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
-   fields.forEach(f=>{
-     let td=document.createElement("td");
-     td.className="border px-2 py-1";
-
-     if(f==="교과목명" && detail){
-       td.innerHTML = \`\${row[f]} <span class="text-blue-600 text-xs cursor-pointer" onclick="openPanel('\${name}')">변경보기</span>\`;
-     } else {
-       td.textContent=row[f]||"";
-     }
-     tr.appendChild(td);
-   });
-
-   tbody.appendChild(tr);
- });
-}
-
-// 검색
+/* --------------------------
+   검색
+-------------------------- */
 document.getElementById("searchInput").addEventListener("input", e=>{
- const v=e.target.value.toLowerCase();
- [...document.querySelectorAll("#tbody tr")].forEach(tr=>{
-   tr.style.display= tr.textContent.toLowerCase().includes(v)?"":"none";
- });
+  const v=e.target.value.toLowerCase();
+  [...document.querySelectorAll("#tbody tr")].forEach(tr=>{
+    tr.style.display = tr.textContent.toLowerCase().includes(v) ? "" : "none";
+  });
 });
 
-function openPanel(name){
- const changes=currentEntry.changes||[];
- const items=changes.filter(ch=> clean(ch.subject)===clean(name));
- const box=document.getElementById("panelContent");
- box.innerHTML="<h3 class='font-bold mb-2'>"+name+"</h3>";
+/* --------------------------
+   변경 상세 패널
+-------------------------- */
+function openPanel(subject){
+  const changes = baseEntry.changes || [];
+  const list = changes.filter(ch=>clean(ch.subject)===clean(subject));
 
- items.forEach(ch=>{
-   box.innerHTML+=\`
-     <div class='mb-3 border-b pb-2'>
-       <p class='font-semibold'>유형: \${ch.type}</p>
-       <p>사유: \${ch.reason||"-"}</p>
-       <p>문서번호: \${ch.changeDocNum||"-"}</p>
-       <p>회의일: \${ch.changeDate||"-"}</p>
-       <table class='mt-2 text-xs w-full border'>
-         <tr class='bg-gray-100'><th class='border px-1'>항목</th><th class='border px-1'>전</th><th class='border px-1'>후</th></tr>
-   \`;
-   if(ch.detail){
-     Object.keys(ch.detail).forEach(k=>{
-       box.innerHTML+=\`<tr><td class='border px-1'>\${k}</td><td class='border px-1'>\${ch.detail[k].before}</td><td class='border px-1'>\${ch.detail[k].after}</td></tr>\`;
-     });
-   }
-   box.innerHTML+="</table></div>";
- });
+  const box=document.getElementById("panelContent");
+  box.innerHTML = `<h3 class="font-bold text-lg mb-2">${subject}</h3>`;
 
- document.getElementById("overlay").style.display="block";
- document.getElementById("panel").style.transform="translateX(0)";
+  list.forEach(ch=>{
+    box.innerHTML += `
+      <div class="mb-4 border-b pb-2">
+        <p><b>유형:</b> ${ch.type}</p>
+        <p><b>사유:</b> ${ch.reason||"-"}</p>
+        <p><b>문서번호:</b> ${ch.changeDocNum||"-"}</p>
+        <p><b>회의일:</b> ${ch.changeDate||"-"}</p>
+        <table class="w-full text-xs mt-2 border">
+          <tr class="bg-gray-100">
+            <th class="border px-1 py-0.5">항목</th>
+            <th class="border px-1 py-0.5">변경 전</th>
+            <th class="border px-1 py-0.5">변경 후</th>
+          </tr>
+    `;
+    if(ch.detail){
+      Object.keys(ch.detail).forEach(k=>{
+        box.innerHTML += `
+          <tr>
+            <td class="border px-1 py-0.5">${k}</td>
+            <td class="border px-1 py-0.5">${ch.detail[k].before||""}</td>
+            <td class="border px-1 py-0.5">${ch.detail[k].after||""}</td>
+          </tr>
+        `;
+      });
+    }
+    box.innerHTML += `</table></div>`;
+  });
+
+  document.getElementById("overlay").style.display="block";
+  document.getElementById("panel").style.transform="translateX(0)";
 }
 
 function closePanel(){
- document.getElementById("overlay").style.display="none";
- document.getElementById("panel").style.transform="translateX(100%)";
+  document.getElementById("overlay").style.display="none";
+  document.getElementById("panel").style.transform="translateX(100%)";
 }
 
-document.addEventListener("DOMContentLoaded", init);
 </script>
 
 </body>
