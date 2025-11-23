@@ -463,6 +463,8 @@ function renderTable(){
         const after = displayValue(f, afterRaw);
         rawValue = `${(before !== "" ? before : "-")} → ${(after !== "" ? after : "-")}`;
       }
+      return -1;
+    };
 
       const value = displayValue(f, rawValue);
 
@@ -485,6 +487,10 @@ function renderTable(){
 
     tbody.appendChild(tr);
   });
+
+  finalData._mark = mark;
+
+  return data;
 }
 
 function updateGradeOptions(){
