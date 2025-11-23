@@ -175,7 +175,9 @@ function processCurriculumSheet(sh) {
   if (start === -1) return alert("표 헤더(개설학년)를 찾을 수 없습니다.");
 
   const headers = rows[start];
-  const body = rows.slice(start+1).filter(r => r.some(x => x));
+const body = rows.slice(start + 1).filter(r => 
+    r.some(x => clean(x) !== "")
+);
 
   const data = body.map(r => {
     const o = {};
@@ -263,7 +265,9 @@ function processChangeSheet(sh) {
     if (!subject) return;
 
     // 해당 학과·연도 데이터 찾기
-    const targets = all.filter(e => e.dept === dept && same(e.year, year));
+const targets = all.filter(
+    e => same(e.dept, dept) && same(e.year, year)
+);
     if (!targets.length) {
       failed.push(`${year}년 ${subject} — 해당 입학년도 교육과정 없음`);
       return;
@@ -274,10 +278,11 @@ function processChangeSheet(sh) {
     // 원본에서 동일 과목 찾기
     const original = entry.data.find(row => same(clean(row["교과목명"]), subject));
 
-    let type;
-    if (!original && afterName) type = "신규";
-    else if (original && !afterName) type = "폐지";
-    else type = "변경";
+let type;
+if (!original && clean(afterName) !== "") type = "신규";
+else if (original && clean(afterName) === "") type = "폐지";
+else type = "변경";
+
 
     // detail 만들기
     const detail = {};
