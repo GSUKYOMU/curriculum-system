@@ -183,10 +183,24 @@ function loadYear(){
 
   if(!all.length){
     alert("해당 연도 데이터가 없습니다.");
+    finalData = [];
+    finalData._mark = {};
+    updateGradeOptions();
+    renderTable();
     return;
   }
 
   baseEntry = all[0];
+
+  const rows = Array.isArray(baseEntry.data) ? baseEntry.data : [];
+  if (!rows.length) {
+    alert("저장된 교육과정 데이터가 비어 있습니다. 업로드를 다시 확인해주세요.");
+    finalData = [];
+    finalData._mark = {};
+    updateGradeOptions();
+    renderTable();
+    return;
+  }
 
   const normalizedChanges = (baseEntry.changes || [])
     .map(normalizeChange)
@@ -195,7 +209,7 @@ function loadYear(){
   baseEntry._normalizedChanges = normalizedChanges;
 
   // 원본 + changes → 최종본 생성
-  finalData = buildFinal(baseEntry.data, normalizedChanges);
+  finalData = buildFinal(rows, normalizedChanges);
   defaultSort(finalData);
   updateGradeOptions();
 
@@ -206,6 +220,10 @@ function loadYear(){
    최종본 생성 (B 방식 핵심)
 -------------------------- */
 function buildFinal(originalRows, changes){
+  if (!Array.isArray(originalRows)) {
+    return [];
+  }
+
   let data = JSON.parse(JSON.stringify(originalRows)).map(r => ({
     ...r,
     _subjectKey: clean(r["교과목명"]) || ""
@@ -320,21 +338,6 @@ function renderTable(){
     fields.forEach(f=>{
       let td=document.createElement("td");
       td.className="border px-2 py-1" + (f === "교과목명" ? " text-left" : " text-center");
-
-      const changeList = info.changedFields || [];
-      const fieldChanged = changeList.includes(f) || info.new || info.deleted;
-      const highlightAll = info.changed && changeList.length === 0;
-      const hasChange = fieldChanged || highlightAll;
-      if (hasChange) td.classList.add("cell-changed");
-
-      let value = row[f] || "";
-      if (f === "교과목명") value = displayName;
-
-      if(hasChange && info.detail && info.detail[f]){
-        const before = info.detail[f].before ?? "";
-        const after = info.detail[f].after ?? "";
-        value = `${before || "-"} → ${after || "-"}`;
-      }
 
       const changeList = info.changedFields || [];
       const fieldChanged = changeList.includes(f) || info.new || info.deleted;
