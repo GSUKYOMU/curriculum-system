@@ -88,15 +88,7 @@ function clean(v){
     .trim();
 }
 function changeKey(change){
-  const type = clean(change?.type);
-  const afterName = clean(change?.after?.name);
-  const beforeName = clean(change?.before?.name);
-
-  if (type === "신규") return afterName;
-  if (type === "폐지") return beforeName;
-  if (type === "변경") return beforeName || afterName;
-
-  return clean(change?.subject || afterName || beforeName || "");
+  return clean(change?.subject || change?.after?.name || change?.before?.name || "");
 }
 function normalizeChange(change){
   const subject = changeKey(change);
