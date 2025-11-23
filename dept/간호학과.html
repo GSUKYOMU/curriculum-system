@@ -95,6 +95,11 @@ let baseEntry = null;  // 원본
 let finalData = [];    // 변경 반영 최종본
 let sortState = {};
 
+function yearValue(v){
+  const n = parseInt(clean(v), 10);
+  return isNaN(n) ? -Infinity : n;
+}
+
 function clean(v){
   return (v || "")
     .toString()
@@ -162,7 +167,10 @@ function init(){
     return;
   }
 
-  availableYears=[...new Set(raw.map(e=>clean(e.year)))].sort();
+  availableYears=[...new Set(raw.map(e=>clean(e.year)))].sort((a,b)=>{
+    const diff = yearValue(b) - yearValue(a);
+    return diff !== 0 ? diff : clean(a).localeCompare(clean(b));
+  });
   selectedYear = availableYears[0];
 
   renderYearButtons();

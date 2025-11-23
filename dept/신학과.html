@@ -96,8 +96,13 @@ let baseEntry = null;  // 원본
 let finalData = [];    // 변경 반영 최종본
 let sortState = {};
 
+function yearValue(v){
+  const n = parseInt(clean(v), 10);
+  return isNaN(n) ? -Infinity : n;
+}
+
 function clean(v){
-  return (v || "")
+  return (v ?? "")
     .toString()
     .normalize("NFKC")
     .replace(/\s+/g, " ")
@@ -118,7 +123,7 @@ function normalizeChange(change){
   const subject = changeKey(change);
   if (!subject) return null;
 
-  const normalized = { ...change, subject };
+const normalized = { ...change, subject };
   if (change.before) normalized.before = { ...change.before, name: clean(change.before.name) };
   if (change.after) normalized.after = { ...change.after, name: clean(change.after.name) };
 
@@ -130,13 +135,26 @@ function loadData(){
 }
 
 function gradeValue(v){
-  const n = parseInt((v||"").toString().match(/\d+/)?.[0]||"",10);
+  const n = parseInt(((v ?? "")).toString().match(/\d+/)?.[0]||"",10);
   return isNaN(n) ? Infinity : n;
 }
 
 function semValue(v){
-  const n = parseInt((v||"").toString().match(/\d+/)?.[0]||"",10);
+  const n = parseInt(((v ?? "")).toString().match(/\d+/)?.[0]||"",10);
   return isNaN(n) ? Infinity : n;
+}
+
+function displayGrade(v){
+  const raw = v ?? "";
+  const normalized = clean(raw);
+  if (normalized === "0") return "0학년";
+  return raw;
+}
+
+function displayValue(field, value){
+  const safe = value ?? "";
+  if (field === "개설학년") return displayGrade(safe);
+  return safe;
 }
 
 function defaultSort(arr){
@@ -163,7 +181,10 @@ function init(){
     return;
   }
 
-  availableYears=[...new Set(raw.map(e=>clean(e.year)))].sort();
+  availableYears=[...new Set(raw.map(e=>clean(e.year)))].sort((a,b)=>{
+    const diff = yearValue(b) - yearValue(a);
+    return diff !== 0 ? diff : clean(a).localeCompare(clean(b));
+  });
   selectedYear = availableYears[0];
 
   renderYearButtons();
@@ -325,16 +346,16 @@ function buildFinal(originalRows, changes){
     }
     else if(ch.type==="신규"){
       const newRow = {
-        "개설학년": ch.after?.grade || "",
-        "개설학기": ch.after?.sem || "",
-        "이수구분": ch.after?.type || "",
+        "개설학년": ch.after?.grade ?? "",
+        "개설학기": ch.after?.sem ?? "",
+        "이수구분": ch.after?.type ?? "",
         "교과목명": displayName,
-        "학점": ch.after?.credit || "",
-        "총시수": ch.after?.total || "",
-        "이론시수": ch.after?.theory || "",
-        "실습시수": ch.after?.practice || "",
-        "실험시수": ch.after?.experiment || "",
-        "실기시수": ch.after?.skill || "",
+        "학점": ch.after?.credit ?? "",
+        "총시수": ch.after?.total ?? "",
+        "이론시수": ch.after?.theory ?? "",
+        "실습시수": ch.after?.practice ?? "",
+        "실험시수": ch.after?.experiment ?? "",
+        "실기시수": ch.after?.skill ?? "",
         _subjectKey: subjectKey
       };
       info.new = true;
@@ -407,14 +428,17 @@ function renderTable(){
       const hasChange = fieldChanged || highlightAll;
       if (hasChange) td.classList.add("cell-changed");
 
-      let value = row[f] || "";
-      if (f === "교과목명") value = displayName;
+      let rawValue = f === "교과목명" ? displayName : row.hasOwnProperty(f) ? row[f] : "";
 
       if(hasChange && info.detail && info.detail[f]){
-        const before = info.detail[f].before ?? "";
-        const after = info.detail[f].after ?? "";
-        value = `${before || "-"} → ${after || "-"}`;
+        const beforeRaw = info.detail[f].before;
+        const afterRaw = info.detail[f].after;
+        const before = displayValue(f, beforeRaw);
+        const after = displayValue(f, afterRaw);
+        rawValue = `${(before !== "" ? before : "-")} → ${(after !== "" ? after : "-")}`;
       }
+
+      const value = displayValue(f, rawValue);
 
       if(f==="교과목명" && (info.new||info.deleted||info.changed)){
         td.innerHTML = `
@@ -423,7 +447,7 @@ function renderTable(){
                 onclick="openPanel(${JSON.stringify(subjectKey)}, ${JSON.stringify(displayName)})">변경보기</span>
         `;
       } else {
-        td.textContent = value || "";
+        td.textContent = value ?? "";
       }
       tr.appendChild(td);
     });
@@ -441,7 +465,9 @@ function updateGradeOptions(){
   const select = document.getElementById("gradeSelect");
   if (!select) return;
 
-  const grades = Array.from(new Set(finalData.map(r => clean(r["개설학년"])))).filter(Boolean);
+  const grades = Array.from(new Set(finalData.map(r => displayGrade(r["개설학년"]))))
+    .map(g => g ?? "")
+    .filter(g => clean(g) !== "");
   grades.sort((a,b)=>gradeValue(a)-gradeValue(b));
 
   select.innerHTML = `<option value="ALL">전체</option>` +
@@ -516,16 +542,16 @@ function downloadExcel(){
     const changeType = info.new ? "신규" : info.deleted ? "폐지" : info.changed ? "변경" : "";
 
     return [
-      row["개설학년"] || "",
-      row["개설학기"] || "",
-      row["이수구분"] || "",
-      row["교과목명"] || "",
-      row["학점"] || "",
-      row["총시수"] || "",
-      row["이론시수"] || "",
-      row["실습시수"] || "",
-      row["실험시수"] || "",
-      row["실기시수"] || "",
+      displayValue("개설학년", row["개설학년"]),
+      displayValue("개설학기", row["개설학기"]),
+      displayValue("이수구분", row["이수구분"]),
+      displayValue("교과목명", row["교과목명"]),
+      displayValue("학점", row["학점"]),
+      displayValue("총시수", row["총시수"]),
+      displayValue("이론시수", row["이론시수"]),
+      displayValue("실습시수", row["실습시수"]),
+      displayValue("실험시수", row["실험시수"]),
+      displayValue("실기시수", row["실기시수"]),
       changeType,
       info.changeDate || "",
       info.changeDocNum || "",
@@ -574,11 +600,13 @@ function openPanel(subjectKey, displayName){
     `;
     if(ch.detail && Object.keys(ch.detail).length){
       Object.keys(ch.detail).forEach(k=>{
+        const before = displayValue(k, ch.detail[k].before);
+        const after = displayValue(k, ch.detail[k].after);
         box.innerHTML += `
           <tr>
             <td class="border px-1 py-0.5">${k}</td>
-            <td class="border px-1 py-0.5">${ch.detail[k].before||""}</td>
-            <td class="border px-1 py-0.5">${ch.detail[k].after||""}</td>
+            <td class="border px-1 py-0.5">${before}</td>
+            <td class="border px-1 py-0.5">${after}</td>
           </tr>
         `;
       });
