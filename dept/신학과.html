@@ -90,6 +90,7 @@
 -------------------------- */
 const STORAGE_KEY = "curriculumData";
 const DEPT_NAME = "신학과";
+const TARGET_DEPT = clean(DEPT_NAME);
 let selectedYear = null;
 let availableYears = [];
 let baseEntry = null;  // 원본
@@ -107,6 +108,16 @@ function clean(v){
     .normalize("NFKC")
     .replace(/\s+/g, " ")
     .trim();
+}
+function normalizeDeptName(name){
+  return clean(name)
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+/g, "");
+}
+function matchesDept(name){
+  if (!name) return false;
+  const n = clean(name);
+  return n === TARGET_DEPT || normalizeDeptName(n) === normalizeDeptName(TARGET_DEPT);
 }
 function changeKey(change){
   const type = clean(change?.type);
@@ -174,7 +185,7 @@ function defaultSort(arr){
 document.addEventListener("DOMContentLoaded", init);
 
 function init(){
-  const raw = loadData().filter(d => clean(d.dept)===DEPT_NAME);
+  const raw = loadData().filter(d => matchesDept(d.dept));
 
   if(!raw.length){
     alert(`${DEPT_NAME} 데이터가 없습니다. 먼저 업로드 해주세요.`);
@@ -228,7 +239,18 @@ function updateYearInfo(){
     return;
   }
 
-  badge.textContent=`현재 ${selectedYear} 입학자 교육과정 표시중`;
+  let extra = "";
+  if (baseEntry && baseEntry.uploadDate) {
+    const doc = clean(baseEntry.docNum);
+    const uploaded = new Date(baseEntry.uploadDate);
+    const uploadedText = isNaN(uploaded) ? "" : uploaded.toLocaleString();
+    const parts = [];
+    if (doc) parts.push(`문서번호 ${doc}`);
+    if (uploadedText) parts.push(`업로드 ${uploadedText}`);
+    extra = parts.length ? ` (${parts.join(" · ")})` : "";
+  }
+
+  badge.textContent=`현재 ${selectedYear} 입학자 교육과정 표시중${extra}`;
   badge.className="text-sm px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200";
 }
 
@@ -237,11 +259,12 @@ function updateYearInfo(){
 -------------------------- */
 function loadYear(){
   const all=loadData()
-    .filter(d => clean(d.dept)===DEPT_NAME && clean(d.year)===clean(selectedYear))
+    .filter(d => matchesDept(d.dept) && clean(d.year)===clean(selectedYear))
     .sort((a,b)=> new Date(b.uploadDate)-new Date(a.uploadDate));
 
   if(!all.length){
     alert("해당 연도 데이터가 없습니다.");
+    baseEntry = null;
     finalData = [];
     finalData._mark = {};
     updateYearInfo();
@@ -255,6 +278,7 @@ function loadYear(){
   const rows = Array.isArray(baseEntry.data) ? baseEntry.data : [];
   if (!rows.length) {
     alert("저장된 교육과정 데이터가 비어 있습니다. 업로드를 다시 확인해주세요.");
+    baseEntry = null;
     finalData = [];
     finalData._mark = {};
     updateYearInfo();
@@ -439,10 +463,8 @@ function renderTable(){
         const after = displayValue(f, afterRaw);
         rawValue = `${(before !== "" ? before : "-")} → ${(after !== "" ? after : "-")}`;
       }
-    }
-  });
-
-  finalData._mark = mark;
+      return -1;
+    };
 
       const value = displayValue(f, rawValue);
 
@@ -465,6 +487,10 @@ function renderTable(){
 
     tbody.appendChild(tr);
   });
+
+  finalData._mark = mark;
+
+  return data;
 }
 
 function updateGradeOptions(){

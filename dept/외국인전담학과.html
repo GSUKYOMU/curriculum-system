@@ -152,6 +152,19 @@ function gradeValue(v){
   return isNaN(n) ? Infinity : n;
 }
 
+function parsePeriod(v){
+  const raw = clean(v);
+  const nums = raw.match(/\d+/g) || [];
+  const year = parseInt(nums[0] || "", 10);
+  const sem = parseInt(nums[1] || "", 10);
+
+  return {
+    label: raw,
+    year: isNaN(year) ? -Infinity : year,
+    sem: isNaN(sem) ? Infinity : sem
+  };
+}
+
 function semValue(v){
   const n = parseInt(((v ?? "")).toString().match(/\d+/)?.[0]||"",10);
   return isNaN(n) ? Infinity : n;
@@ -232,8 +245,11 @@ function refreshYears(){
   const raw = allEntries.filter(d => clean(d.dept)===clean(selectedDept));
 
   availableYears=[...new Set(raw.map(e=>clean(e.year)))].sort((a,b)=>{
-    const diff = yearValue(b) - yearValue(a);
-    return diff !== 0 ? diff : clean(a).localeCompare(clean(b));
+    const pa = parsePeriod(a);
+    const pb = parsePeriod(b);
+    if (pa.year !== pb.year) return pb.year - pa.year;
+    if (pa.sem !== pb.sem) return pb.sem - pa.sem;
+    return pa.label.localeCompare(pb.label);
   });
   selectedYear = availableYears[0] || null;
 
@@ -256,7 +272,9 @@ function renderYearButtons(){
   wrap.innerHTML="";
   availableYears.forEach(y=>{
     const btn=document.createElement("button");
-    btn.textContent=`${y} 입학자`;
+    const period = parsePeriod(y);
+    const label = period.label || "미정";
+    btn.textContent=`${label}`;
     btn.className=yearButtonClass(clean(y)===clean(selectedYear));
     btn.onclick=()=>{
       selectedYear=y;
@@ -278,7 +296,8 @@ function updateYearInfo(){
     return;
   }
 
-  badge.textContent=`현재 ${selectedDept} ${selectedYear} 입학자 교육과정 표시중`;
+  const label = parsePeriod(selectedYear).label || selectedYear || "미정";
+  badge.textContent=`현재 ${selectedDept} ${label} 교육과정 표시중`;
   badge.className="text-sm px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200";
 }
 
