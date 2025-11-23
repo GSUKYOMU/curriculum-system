@@ -106,10 +106,31 @@ function clean(v) {
   return (v || "")
     .toString()
     .normalize("NFKC")
-    .replace(/ /g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 function same(a, b) { return clean(a) === clean(b); }
+function changeKey(change) {
+  const type = clean(change?.type);
+  const afterName = clean(change?.after?.name);
+  const beforeName = clean(change?.before?.name);
+
+  if (type === "신규") return afterName;
+  if (type === "폐지") return beforeName;
+  if (type === "변경") return beforeName || afterName;
+
+  return clean(change?.subject || afterName || beforeName || "");
+}
+function normalizeChange(change) {
+  const subject = changeKey(change);
+  if (!subject) return null;
+
+  const normalized = { ...change, subject };
+  if (change.before) normalized.before = { ...change.before, name: clean(change.before.name) };
+  if (change.after) normalized.after = { ...change.after, name: clean(change.after.name) };
+
+  return normalized;
+}
 
 function getData() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
@@ -185,6 +206,10 @@ const body = rows.slice(start + 1).filter(r =>
     return o;
   });
 
+  data.forEach(row => {
+    if (row["교과목명"] !== undefined) row["교과목명"] = clean(row["교과목명"]);
+  });
+
   let all = getData();
 
   // 같은 학과 + 문서번호 기존 항목 제거
@@ -196,6 +221,11 @@ const body = rows.slice(start + 1).filter(r =>
     changes: [],
     uploadDate: new Date().toISOString()
   });
+
+  all = all.map(entry => ({
+    ...entry,
+    changes: (entry.changes || []).map(normalizeChange).filter(Boolean)
+  }));
 
   saveData(all);
 
@@ -247,21 +277,21 @@ let start = rows.findIndex(r => clean(r[0]) === "(변경할)교육과정 연도"
 
     // before
     const before = {
-      grade:r[1], sem:r[2], type:r[3], name:r[4],
+      grade:r[1], sem:r[2], type:r[3], name:clean(r[4]),
       credit:r[5], total:r[6], theory:r[7],
       practice:r[8], skill:r[9], experiment:r[10]
     };
-    const beforeName = clean(before.name);
+    const beforeName = before.name;
 
     // after
     const after = {
-      grade:r[12], sem:r[13], type:r[14], name:r[15],
+      grade:r[12], sem:r[13], type:r[14], name:clean(r[15]),
       credit:r[16], total:r[17], theory:r[18],
       practice:r[19], skill:r[20], experiment:r[21]
     };
-    const afterName = clean(after.name);
+    const afterName = after.name;
 
-    const subject = afterName || beforeName;
+    const subject = changeKey({ subject: after.name || before.name, before, after });
     if (!subject) return;
 
     // 해당 학과·연도 데이터 찾기
@@ -286,16 +316,16 @@ else type = "변경";
 
     // detail 만들기
     const detail = {};
-    if (type === "변경") {
-      const fields = {
-        "개설학년":"grade","개설학기":"sem","이수구분":"type","교과목명":"name",
-        "학점":"credit","총시수":"total","이론시수":"theory",
-        "실습시수":"practice","실기시수":"skill","실험시수":"experiment"
-      };
+    const fields = {
+      "개설학년":"grade","개설학기":"sem","이수구분":"type","교과목명":"name",
+      "학점":"credit","총시수":"total","이론시수":"theory",
+      "실습시수":"practice","실기시수":"skill","실험시수":"experiment"
+    };
 
+    if (type === "변경") {
       Object.keys(fields).forEach(label => {
         const key = fields[label];
-        const oldVal = original[label] ?? "";
+        const oldVal = (original && original[label]) ?? "";
         const newVal = after[key] ?? "";
         if (!same(oldVal,newVal)) {
           detail[label] = { before: oldVal, after: newVal };
@@ -303,9 +333,28 @@ else type = "변경";
       });
     }
 
+    if (type === "신규") {
+      Object.keys(fields).forEach(label => {
+        const key = fields[label];
+        const newVal = after[key] ?? "";
+        if (clean(newVal) !== "") {
+          detail[label] = { before: "", after: newVal };
+        }
+      });
+    }
+
+    if (type === "폐지") {
+      Object.keys(fields).forEach(label => {
+        const oldVal = (original && original[label]) ?? before[fields[label]] ?? "";
+        if (clean(oldVal) !== "") {
+          detail[label] = { before: oldVal, after: "" };
+        }
+      });
+    }
+
     if (!entry.changes) entry.changes = [];
 
-    entry.changes.push({
+    const changeRecord = normalizeChange({
       year,
       type,
       subject,
@@ -316,6 +365,14 @@ else type = "변경";
       changeDocNum: docNum,
       changeDate: meetingDate || new Date().toISOString().slice(0,10)
     });
+
+    if (!changeRecord) return;
+
+    entry.changes.push(changeRecord);
+
+    entry.changes = entry.changes
+      .map(normalizeChange)
+      .filter(Boolean);
 
     entry.approved = approved;
     entry.meetingDate = meetingDate;
