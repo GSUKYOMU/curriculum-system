@@ -439,6 +439,10 @@ function renderTable(){
         const after = displayValue(f, afterRaw);
         rawValue = `${(before !== "" ? before : "-")} → ${(after !== "" ? after : "-")}`;
       }
+    }
+  });
+
+  finalData._mark = mark;
 
       const value = displayValue(f, rawValue);
 
