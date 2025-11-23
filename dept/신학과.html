@@ -123,7 +123,7 @@ function normalizeChange(change){
   const subject = changeKey(change);
   if (!subject) return null;
 
-  const normalized = { ...change, subject };
+const normalized = { ...change, subject };
   if (change.before) normalized.before = { ...change.before, name: clean(change.before.name) };
   if (change.after) normalized.after = { ...change.after, name: clean(change.after.name) };
 
