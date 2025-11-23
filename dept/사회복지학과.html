@@ -463,6 +463,8 @@ function renderTable(){
 
   const mark = finalData._mark || {};
 
+  const tableFields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+
   finalData.forEach(row=>{
     const subjectKey = clean(row._subjectKey || row["교과목명"]);
     const info = mark[subjectKey] || {};
@@ -473,15 +475,15 @@ function renderTable(){
     else if(info.deleted) tr.classList.add("row-deleted");
     else if(info.changed) tr.classList.add("row-changed");
 
-    const fields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+    const changeList = info.changedFields || [];
+    const tableAwareChanges = changeList.filter(f => tableFields.includes(f));
+    const highlightAll = info.changed && tableAwareChanges.length === 0;
 
-    fields.forEach(f=>{
+    tableFields.forEach(f=>{
       let td=document.createElement("td");
       td.className="border px-2 py-1" + (f === "교과목명" ? " text-left" : " text-center");
 
-      const changeList = info.changedFields || [];
-      const fieldChanged = changeList.includes(f) || info.new || info.deleted;
-      const highlightAll = info.changed && changeList.length === 0;
+      const fieldChanged = tableAwareChanges.includes(f) || info.new || info.deleted;
       const hasChange = fieldChanged || highlightAll;
       if (hasChange) td.classList.add("cell-changed");
 

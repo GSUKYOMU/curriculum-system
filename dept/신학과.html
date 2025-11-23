@@ -147,7 +147,7 @@ function semValue(v){
 function displayGrade(v){
   const raw = v ?? "";
   const normalized = clean(raw);
-  if (normalized === "0") return "0학년";
+  if (normalized === "0") return "0";
   return raw;
 }
 
@@ -416,15 +416,17 @@ function renderTable(){
     else if(info.deleted) tr.classList.add("row-deleted");
     else if(info.changed) tr.classList.add("row-changed");
 
-    const fields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+    const tableFields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
 
-    fields.forEach(f=>{
+    const changeList = info.changedFields || [];
+    const tableAwareChanges = changeList.filter(f => tableFields.includes(f));
+    const highlightAll = info.changed && tableAwareChanges.length === 0;
+
+    tableFields.forEach(f=>{
       let td=document.createElement("td");
       td.className="border px-2 py-1" + (f === "교과목명" ? " text-left" : " text-center");
 
-      const changeList = info.changedFields || [];
-      const fieldChanged = changeList.includes(f) || info.new || info.deleted;
-      const highlightAll = info.changed && changeList.length === 0;
+      const fieldChanged = tableAwareChanges.includes(f) || info.new || info.deleted;
       const hasChange = fieldChanged || highlightAll;
       if (hasChange) td.classList.add("cell-changed");
 
@@ -437,6 +439,10 @@ function renderTable(){
         const after = displayValue(f, afterRaw);
         rawValue = `${(before !== "" ? before : "-")} → ${(after !== "" ? after : "-")}`;
       }
+    }
+  });
+
+  finalData._mark = mark;
 
       const value = displayValue(f, rawValue);
 
