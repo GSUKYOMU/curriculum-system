@@ -11,6 +11,7 @@
   .row-new { background:#e8ffe8; font-weight:bold; }
   .row-deleted { background:#ffe5e5; color:#9b0000; text-decoration:line-through; }
   .row-changed { background:#fff7cc; }
+  .cell-changed { background:#fff0b3; font-weight:600; }
   .sort-icon { font-size:10px; margin-left:4px; }
   #overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
   #panel {
@@ -81,7 +82,32 @@ let finalData = [];    // 변경 반영 최종본
 let sortState = {};
 
 function clean(v){
-  return (v||"").toString().trim();
+  return (v || "")
+    .toString()
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+function changeKey(change){
+  const type = clean(change?.type);
+  const afterName = clean(change?.after?.name);
+  const beforeName = clean(change?.before?.name);
+
+  if (type === "신규") return afterName;
+  if (type === "폐지") return beforeName;
+  if (type === "변경") return beforeName || afterName;
+
+  return clean(change?.subject || afterName || beforeName || "");
+}
+function normalizeChange(change){
+  const subject = changeKey(change);
+  if (!subject) return null;
+
+  const normalized = { ...change, subject };
+  if (change.before) normalized.before = { ...change.before, name: clean(change.before.name) };
+  if (change.after) normalized.after = { ...change.after, name: clean(change.after.name) };
+
+  return normalized;
 }
 function loadData(){
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]"); }
@@ -131,8 +157,14 @@ function loadYear(){
 
   baseEntry = all[0];
 
+  const normalizedChanges = (baseEntry.changes || [])
+    .map(normalizeChange)
+    .filter(Boolean);
+
+  baseEntry._normalizedChanges = normalizedChanges;
+
   // 원본 + changes → 최종본 생성
-  finalData = buildFinal(baseEntry.data, baseEntry.changes || []);
+  finalData = buildFinal(baseEntry.data, normalizedChanges);
 
   renderTable();
 }
@@ -141,47 +173,86 @@ function loadYear(){
    최종본 생성 (B 방식 핵심)
 -------------------------- */
 function buildFinal(originalRows, changes){
-  let data = JSON.parse(JSON.stringify(originalRows)); // 깊은복사
+  let data = JSON.parse(JSON.stringify(originalRows)).map(r => ({
+    ...r,
+    _subjectKey: clean(r["교과목명"]) || ""
+  }));
 
   // 삭제 / 변경 등을 표시하기 위한 map
   const mark = {};
 
   changes.forEach(ch=>{
-    const key = clean(ch.subject);
+    const subjectKey = changeKey(ch);
+    if (!subjectKey) return;
+
+    const displayName = clean(ch.after?.name) || clean(ch.before?.name) || subjectKey;
+    mark[subjectKey] = mark[subjectKey] || { subjectKey, changes: [] };
+    const info = mark[subjectKey];
+
+    info.type = ch.type;
+    info.displayName = displayName;
+    info.reason = ch.reason;
+    info.changeDocNum = ch.changeDocNum;
+    info.changeDate = ch.changeDate;
+    info.detail = info.detail || {};
+    if (ch.detail) {
+      Object.entries(ch.detail).forEach(([label, diff]) => {
+        info.detail[label] = diff;
+      });
+    }
+    info.before = ch.before;
+    info.after = ch.after;
+    info.changes.push(ch);
 
     if(ch.type==="폐지"){
-      const idx = data.findIndex(r => clean(r["교과목명"])===key);
+      const idx = data.findIndex(r => clean(r._subjectKey||r["교과목명"])===subjectKey);
       if(idx>-1){
-        mark[key] = mark[key]||{};
-        mark[key].deleted = true;
+        info.deleted = true;
       }
     }
     else if(ch.type==="신규"){
       // 신규는 원본에 없으므로 별도 push
       const newRow = {
-        "개설학년": ch.after.grade || "",
-        "개설학기": ch.after.sem || "",
-        "이수구분": ch.after.type || "",
-        "교과목명": ch.after.name || "",
-        "학점": ch.after.credit || "",
-        "총시수": ch.after.total || "",
-        "이론시수": ch.after.theory || "",
-        "실습시수": ch.after.practice || "",
-        "실험시수": ch.after.experiment || "",
-        "실기시수": ch.after.skill || ""
+        "개설학년": ch.after?.grade || "",
+        "개설학기": ch.after?.sem || "",
+        "이수구분": ch.after?.type || "",
+        "교과목명": displayName,
+        "학점": ch.after?.credit || "",
+        "총시수": ch.after?.total || "",
+        "이론시수": ch.after?.theory || "",
+        "실습시수": ch.after?.practice || "",
+        "실험시수": ch.after?.experiment || "",
+        "실기시수": ch.after?.skill || "",
+        _subjectKey: subjectKey
       };
-      mark[key] = mark[key]||{};
-      mark[key].new = true;
+      info.new = true;
 
       data.push(newRow);
     }
     else if(ch.type==="변경"){
-      const idx = data.findIndex(r => clean(r["교과목명"])===key);
+      const idx = data.findIndex(r => clean(r._subjectKey||r["교과목명"])===subjectKey);
       if(idx>-1){
-        mark[key] = mark[key]||{};
-        mark[key].changed = true;
+        info.changed = true;
 
-        // 표시만 하고 실제 데이터는 변경하지 않는다(B 방식)
+        const updated = { ...data[idx] };
+        const fieldMap = {
+          grade:"개설학년", sem:"개설학기", type:"이수구분", name:"교과목명",
+          credit:"학점", total:"총시수", theory:"이론시수", practice:"실습시수",
+          experiment:"실험시수", skill:"실기시수"
+        };
+
+        Object.entries(fieldMap).forEach(([key,label])=>{
+          const val = ch.after?.[key];
+          if (val !== undefined && val !== null && clean(val) !== "") {
+            updated[label] = key === "name" ? displayName : val;
+          }
+        });
+
+        updated._subjectKey = subjectKey;
+        data[idx] = updated;
+
+        const changedFields = Object.keys(ch.detail || {});
+        info.changedFields = Array.from(new Set([...(info.changedFields||[]), ...changedFields]));
       }
     }
   });
@@ -203,8 +274,9 @@ function renderTable(){
   const mark = finalData._mark || {};
 
   finalData.forEach(row=>{
-    const name = clean(row["교과목명"]);
-    const info = mark[name] || {};
+    const subjectKey = clean(row._subjectKey || row["교과목명"]);
+    const info = mark[subjectKey] || {};
+    const displayName = info.displayName || row["교과목명"];
 
     const tr=document.createElement("tr");
     if(info.new) tr.classList.add("row-new");
@@ -217,17 +289,37 @@ function renderTable(){
       let td=document.createElement("td");
       td.className="border px-2 py-1";
 
+      const changeList = info.changedFields || [];
+      const fieldChanged = changeList.includes(f) || info.new || info.deleted;
+      const highlightAll = info.changed && changeList.length === 0;
+      const hasChange = fieldChanged || highlightAll;
+      if (hasChange) td.classList.add("cell-changed");
+
+      let value = row[f] || "";
+      if (f === "교과목명") value = displayName;
+
+      if(hasChange && info.detail && info.detail[f]){
+        const before = info.detail[f].before ?? "";
+        const after = info.detail[f].after ?? "";
+        value = `${before || "-"} → ${after || "-"}`;
+      }
+
       if(f==="교과목명" && (info.new||info.deleted||info.changed)){
         td.innerHTML = `
-          ${row[f]||""}
+          ${value||""}
           <span class="text-blue-600 text-xs cursor-pointer"
-                onclick="openPanel('${name}')">변경보기</span>
+                onclick="openPanel(${JSON.stringify(subjectKey)}, ${JSON.stringify(displayName)})">변경보기</span>
         `;
       } else {
-        td.textContent = row[f] || "";
+        td.textContent = value || "";
       }
       tr.appendChild(td);
     });
+
+    if (info.new || info.deleted || info.changed) {
+      tr.classList.add("cursor-pointer");
+      tr.onclick = () => openPanel(subjectKey, displayName);
+    }
 
     tbody.appendChild(tr);
   });
@@ -273,12 +365,16 @@ document.getElementById("searchInput").addEventListener("input", e=>{
 /* --------------------------
    변경 상세 패널
 -------------------------- */
-function openPanel(subject){
-  const changes = baseEntry.changes || [];
-  const list = changes.filter(ch=>clean(ch.subject)===clean(subject));
+function openPanel(subjectKey, displayName){
+  const changes = baseEntry._normalizedChanges || [];
+  const list = changes.filter(ch=>ch.subject===clean(subjectKey));
 
   const box=document.getElementById("panelContent");
-  box.innerHTML = `<h3 class="font-bold text-lg mb-2">${subject}</h3>`;
+  box.innerHTML = `<h3 class=\"font-bold text-lg mb-2\">${displayName || subjectKey}</h3>`;
+
+  if (!list.length) {
+    box.innerHTML += `<p class=\"text-sm text-gray-500\">변경 내역을 찾을 수 없습니다.</p>`;
+  }
 
   list.forEach(ch=>{
     box.innerHTML += `
@@ -294,7 +390,7 @@ function openPanel(subject){
             <th class="border px-1 py-0.5">변경 후</th>
           </tr>
     `;
-    if(ch.detail){
+    if(ch.detail && Object.keys(ch.detail).length){
       Object.keys(ch.detail).forEach(k=>{
         box.innerHTML += `
           <tr>
@@ -304,6 +400,12 @@ function openPanel(subject){
           </tr>
         `;
       });
+    } else {
+      box.innerHTML += `
+        <tr>
+          <td class="border px-1 py-0.5" colspan="3">세부 변경 항목이 없습니다.</td>
+        </tr>
+      `;
     }
     box.innerHTML += `</table></div>`;
   });
