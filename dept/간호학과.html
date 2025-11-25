@@ -69,6 +69,7 @@
 <tr>
   <th class="border px-2 py-1 cursor-pointer text-center" onclick="sortTable('개설학년')">개설학년 <span id="s-개설학년" class="sort-icon"></span></th>
   <th class="border px-2 py-1 cursor-pointer text-center" onclick="sortTable('개설학기')">개설학기 <span id="s-개설학기" class="sort-icon"></span></th>
+  <th class="border px-2 py-1 cursor-pointer text-center" onclick="sortTable('이수구분')">이수구분 <span id="s-이수구분" class="sort-icon"></span></th>
   <th class="border px-2 py-1 cursor-pointer text-left" onclick="sortTable('교과목명')">교과목명 <span id="s-교과목명" class="sort-icon"></span></th>
   <th class="border px-2 py-1 cursor-pointer text-center" onclick="sortTable('학점')">학점 <span id="s-학점" class="sort-icon"></span></th>
   <th class="border px-2 py-1 cursor-pointer text-center" onclick="sortTable('총시수')">총시수 <span id="s-총시수" class="sort-icon"></span></th>
@@ -149,6 +150,8 @@ function defaultSort(arr){
     if (g1 !== g2) return g1 - g2;
     const s1 = semValue(a["개설학기"]), s2 = semValue(b["개설학기"]);
     if (s1 !== s2) return s1 - s2;
+    const t1 = clean(a["이수구분"]), t2 = clean(b["이수구분"]);
+    if (t1 !== t2) return t1.localeCompare(t2);
     return clean(a["교과목명"]).localeCompare(clean(b["교과목명"]));
   });
   return arr;
@@ -405,7 +408,7 @@ function renderTable(){
     else if(info.deleted) tr.classList.add("row-deleted");
     else if(info.changed) tr.classList.add("row-changed");
 
-    const tableFields=["개설학년","개설학기","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+    const tableFields=["개설학년","개설학기","이수구분","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
 
     const changeList = info.changedFields || [];
     const tableAwareChanges = changeList.filter(f => tableFields.includes(f));
