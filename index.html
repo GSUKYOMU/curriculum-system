@@ -266,6 +266,12 @@ function processChangeSheet(sh) {
 let start = rows.findIndex(r => clean(r[0]) === "(변경할)교육과정 연도");
   if (start === -1) return alert("변경사유서 헤더를 찾을 수 없습니다.");
 
+  const headerRow = rows[start] || [];
+  const idxMap = headerRow.reduce((acc, label, i) => {
+    acc[clean(label)] = i;
+    return acc;
+  }, {});
+
   const body = rows.slice(start+1).filter(r => r.some(x => x));
 
   let all = getData();
@@ -276,19 +282,35 @@ let start = rows.findIndex(r => clean(r[0]) === "(변경할)교육과정 연도"
     const year = clean(r[0]);
     if (!year) return;
 
+    const getVal = (row, label) => row[idxMap[clean(label)]];
+
     // before
     const before = {
-      grade:r[1], sem:r[2], type:r[3], name:clean(r[4]),
-      credit:r[5], total:r[6], theory:r[7],
-      practice:r[8], skill:r[9], experiment:r[10]
+      grade:getVal(r, "(전)개설학년"),
+      sem:getVal(r, "(전)개설학기"),
+      type:getVal(r, "(전)이수구분"),
+      name:clean(getVal(r, "(전)교과목명")),
+      credit:getVal(r, "(전)학점"),
+      total:getVal(r, "(전)총시수"),
+      theory:getVal(r, "(전)이론"),
+      practice:getVal(r, "(전)실습"),
+      skill:getVal(r, "(전)실기"),
+      experiment:getVal(r, "(전)실험")
     };
     const beforeName = before.name;
 
     // after
     const after = {
-      grade:r[12], sem:r[13], type:r[14], name:clean(r[15]),
-      credit:r[16], total:r[17], theory:r[18],
-      practice:r[19], skill:r[20], experiment:r[21]
+      grade:getVal(r, "(후)개설학년"),
+      sem:getVal(r, "(후)개설학기"),
+      type:getVal(r, "(후)이수구분"),
+      name:clean(getVal(r, "(후)교과목명")),
+      credit:getVal(r, "(후)학점"),
+      total:getVal(r, "(후)총시수"),
+      theory:getVal(r, "(후)이론"),
+      practice:getVal(r, "(후)실습"),
+      skill:getVal(r, "(후)실기"),
+      experiment:getVal(r, "(후)실험")
     };
     const afterName = after.name;
 
@@ -362,7 +384,7 @@ else type = "변경";
       before: type==="신규" ? null : before,
       after:  type==="폐지" ? null : after,
       detail,
-      reason: clean(r[11]),
+      reason: clean(getVal(r, "변경사유")),
       changeDocNum: docNum,
       changeDate: meetingDate || new Date().toISOString().slice(0,10)
     });
