@@ -342,6 +342,7 @@ function loadYear(){
   const previousRows = Array.isArray(previousEntry?.data) ? previousEntry.data : null;
   const diffMark = buildDiffMarks(finalData, previousRows);
   finalData._mark = mergeMarks(finalData._mark || {}, diffMark);
+  applyDocumentHighlights(normalizedChanges, finalData);
 
   renderTable();
 }
@@ -490,6 +491,46 @@ function mergeMarks(baseMark, extraMark){
     merged[key] = mergeMarkInfo(merged[key], info);
   });
   return merged;
+}
+
+
+function applyDocumentHighlights(changes, data){
+  if (!Array.isArray(changes) || !Array.isArray(data)) return;
+
+  const mark = data._mark || {};
+  const lookup = new Map();
+  data.forEach(row => {
+    const key = clean(row._subjectKey || row["교과목명"]);
+    if (key) lookup.set(key, true);
+  });
+
+  changes.forEach(ch => {
+    const subjectKey = changeKey(ch);
+    if (!subjectKey) return;
+    const displayName = clean(ch.after?.name) || clean(ch.before?.name) || subjectKey;
+    const candidates = [subjectKey, clean(ch.before?.name), clean(ch.after?.name)].filter(Boolean);
+    const matchedKey = candidates.find(k => lookup.has(k)) || subjectKey;
+
+    const docInfo = {
+      subjectKey: matchedKey,
+      displayName,
+      reason: ch.reason,
+      changeDocNum: ch.changeDocNum,
+      changeDate: ch.changeDate,
+      detail: ch.detail || {},
+      changedFields: Object.keys(ch.detail || {}),
+      changes: [ch]
+    };
+
+    const existing = mark[matchedKey] || mark[subjectKey];
+    const merged = mergeMarkInfo(existing, docInfo);
+    if (!merged.new && !merged.deleted) {
+      merged.changed = true;
+    }
+    mark[matchedKey] = merged;
+  });
+
+  data._mark = mark;
 }
 
 function buildDiffMarks(currentRows, previousRows){
