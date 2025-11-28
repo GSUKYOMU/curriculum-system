@@ -418,7 +418,21 @@ function buildFinal(originalRows, changes){
           }
         });
 
-        updated._subjectKey = subjectKey;
+        if (ch.detail) {
+          Object.entries(ch.detail).forEach(([label, diff]) => {
+            const afterVal = diff?.after;
+            if (afterVal === undefined || afterVal === null) return;
+            if (clean(afterVal) === "") return;
+            if (label === "교과목명") {
+              updated[label] = displayName || afterVal;
+              updated._subjectKey = clean(displayName || afterVal);
+            } else {
+              updated[label] = afterVal;
+            }
+          });
+        }
+
+        updated._subjectKey = updated._subjectKey || subjectKey;
         data[idx] = updated;
 
         const changedFields = Object.keys(ch.detail || {});
@@ -747,13 +761,27 @@ function downloadExcel(){
    변경 상세 패널
 -------------------------- */
 
+function matchesSubject(change, key, displayName){
+  const targets = [clean(key), clean(displayName)].filter(Boolean);
+  if (!targets.length) return false;
+
+  const candidates = [
+    change?.subject,
+    change?.before?.name,
+    change?.after?.name
+  ].map(clean).filter(Boolean);
+
+  return targets.some(t => candidates.includes(t));
+}
+
 function openPanel(subjectKey, displayName){
   const key = clean(subjectKey);
+  const name = clean(displayName);
   const mark = finalData._mark || {};
   const info = key ? (mark[key] || {}) : {};
   const normalizedChanges = baseEntry?._normalizedChanges || [];
-  const changesFromBase = key ? normalizedChanges.filter(ch => clean(ch.subject) === key) : [];
-  const changesFromMark = Array.isArray(info.changes) ? info.changes.filter(Boolean) : [];
+  const changesFromBase = normalizedChanges.filter(ch => matchesSubject(ch, key, name));
+  const changesFromMark = (Array.isArray(info.changes) ? info.changes : []).filter(ch => matchesSubject(ch, key, name));
   const list = (changesFromMark.length ? changesFromMark : changesFromBase).map(ch => ({ ...ch }));
   const fallbackType = info.new ? "신규" : info.deleted ? "폐지" : info.changed ? "변경" : "";
 
