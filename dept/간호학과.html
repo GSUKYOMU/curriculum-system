@@ -428,6 +428,7 @@ function mergeMarks(baseMark, extraMark){
 function buildDiffMarks(currentRows, previousRows){
   const mark = {};
   if (!Array.isArray(currentRows)) return mark;
+  if (!Array.isArray(previousRows) || previousRows.length === 0) return mark;
 
   const prevMap = new Map();
   (Array.isArray(previousRows) ? previousRows : []).forEach(row => {
@@ -659,21 +660,41 @@ function downloadExcel(){
 /* --------------------------
    변경 상세 패널
 -------------------------- */
-function openPanel(subjectKey, displayName){
-  const changes = baseEntry._normalizedChanges || [];
-  const list = changes.filter(ch=>ch.subject===clean(subjectKey));
 
+function openPanel(subjectKey, displayName){
+  const key = clean(subjectKey);
+  const mark = finalData._mark || {};
+  const info = key ? (mark[key] || {}) : {};
+  const normalizedChanges = baseEntry?._normalizedChanges || [];
+  const changesFromBase = key ? normalizedChanges.filter(ch => clean(ch.subject) === key) : [];
+  const changesFromMark = Array.isArray(info.changes) ? info.changes.filter(Boolean) : [];
+  const list = (changesFromMark.length ? changesFromMark : changesFromBase).map(ch => ({ ...ch }));
+  const fallbackType = info.new ? "신규" : info.deleted ? "폐지" : info.changed ? "변경" : "";
+
+  if (!list.length && info.detail) {
+    list.push({
+      subject: key,
+      type: fallbackType,
+      reason: info.reason,
+      changeDocNum: info.changeDocNum,
+      changeDate: info.changeDate,
+      detail: info.detail
+    });
+  }
+
+  const title = displayName || info.displayName || key || "과목";
   const box=document.getElementById("panelContent");
-  box.innerHTML = `<h3 class=\"font-bold text-lg mb-2\">${displayName || subjectKey}</h3>`;
+  box.innerHTML = `<h3 class="font-bold text-lg mb-2">${title}</h3>`;
 
   if (!list.length) {
-    box.innerHTML += `<p class=\"text-sm text-gray-500\">변경 내역을 찾을 수 없습니다.</p>`;
+    box.innerHTML += `<p class="text-sm text-gray-500">변경 내역을 찾을 수 없습니다.</p>`;
   }
 
   list.forEach(ch=>{
+    const detail = ch.detail || {};
     box.innerHTML += `
       <div class="mb-4 border-b pb-2">
-        <p><b>유형:</b> ${ch.type}</p>
+        <p><b>유형:</b> ${ch.type || fallbackType || "-"}</p>
         <p><b>사유:</b> ${ch.reason||"-"}</p>
         <p><b>문서번호:</b> ${ch.changeDocNum||"-"}</p>
         <p><b>회의일:</b> ${ch.changeDate||"-"}</p>
@@ -684,13 +705,15 @@ function openPanel(subjectKey, displayName){
             <th class="border px-1 py-0.5">변경 후</th>
           </tr>
     `;
-    if(ch.detail && Object.keys(ch.detail).length){
-      Object.keys(ch.detail).forEach(k=>{
+    if(detail && Object.keys(detail).length){
+      Object.keys(detail).forEach(k=>{
+        const before = displayValue(k, detail[k].before);
+        const after = displayValue(k, detail[k].after);
         box.innerHTML += `
           <tr>
             <td class="border px-1 py-0.5">${k}</td>
-            <td class="border px-1 py-0.5">${ch.detail[k].before||""}</td>
-            <td class="border px-1 py-0.5">${ch.detail[k].after||""}</td>
+            <td class="border px-1 py-0.5">${before}</td>
+            <td class="border px-1 py-0.5">${after}</td>
           </tr>
         `;
       });
@@ -709,6 +732,7 @@ function openPanel(subjectKey, displayName){
 }
 
 function closePanel(){
+
   document.getElementById("overlay").style.display="none";
   document.getElementById("panel").style.transform="translateX(100%)";
 }
