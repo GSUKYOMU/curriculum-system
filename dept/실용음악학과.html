@@ -13,6 +13,7 @@
   .row-deleted { background:#ffe5e5; color:#9b0000; text-decoration:line-through; }
   .row-changed { background:#fff7cc; }
   .cell-changed { background:#fff0b3; font-weight:600; }
+  .major-required { color:#b91c1c; font-weight:600; }
   .sort-icon { font-size:10px; margin-left:4px; }
   #overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
   #panel {
@@ -444,6 +445,10 @@ function renderTable(){
       }
 
       const value = displayValue(f, rawValue);
+
+      if (f === "이수구분" && clean(value).includes("전공필수")) {
+        td.classList.add("major-required");
+      }
 
       if(f==="교과목명" && (info.new||info.deleted||info.changed)){
         td.innerHTML = `
