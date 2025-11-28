@@ -342,7 +342,9 @@ function buildFinal(originalRows, changes){
     const subjectKey = changeKey(ch);
     if (!subjectKey) return;
 
-    const displayName = clean(ch.after?.name) || clean(ch.before?.name) || subjectKey;
+    const baseAfterName = clean(ch.after?.name);
+    const baseBeforeName = clean(ch.before?.name);
+    let displayName = baseAfterName || baseBeforeName || subjectKey;
     const map = subjectLookup();
     const findIdx = () => {
       const keys = [subjectKey, clean(ch.before?.name), clean(ch.after?.name)].filter(Boolean);
@@ -351,6 +353,14 @@ function buildFinal(originalRows, changes){
       }
       return -1;
     };
+
+    const idx = findIdx();
+    if (idx > -1 && !baseAfterName && !baseBeforeName) {
+      const existingName = clean(data[idx]["교과목명"] || data[idx]._subjectKey);
+      if (existingName) {
+        displayName = existingName;
+      }
+    }
 
     let matchedKey = subjectKey;
 
@@ -373,7 +383,6 @@ function buildFinal(originalRows, changes){
     info.changes.push(ch);
 
     if(ch.type==="폐지"){
-      const idx = findIdx();
       if(idx>-1){
         matchedKey = clean(data[idx]._subjectKey || data[idx]["교과목명"]);
         info.deleted = true;
@@ -399,7 +408,6 @@ function buildFinal(originalRows, changes){
       data.push(newRow);
     }
     else if(ch.type==="변경"){
-      const idx = findIdx();
       if(idx>-1){
         matchedKey = clean(data[idx]._subjectKey || data[idx]["교과목명"]);
         info.changed = true;
@@ -482,15 +490,19 @@ function applyDocumentHighlights(changes, data){
   const lookup = new Map();
   data.forEach(row => {
     const key = clean(row._subjectKey || row["교과목명"]);
-    if (key) lookup.set(key, true);
+    if (key) lookup.set(key, row);
   });
 
   changes.forEach(ch => {
     const subjectKey = changeKey(ch);
     if (!subjectKey) return;
-    const displayName = clean(ch.after?.name) || clean(ch.before?.name) || subjectKey;
+    const baseAfterName = clean(ch.after?.name);
+    const baseBeforeName = clean(ch.before?.name);
     const candidates = [subjectKey, clean(ch.before?.name), clean(ch.after?.name)].filter(Boolean);
     const matchedKey = candidates.find(k => lookup.has(k)) || subjectKey;
+    const matchedRow = lookup.get(matchedKey) || lookup.get(subjectKey);
+    const rowName = clean(matchedRow?.["교과목명"] || matchedRow?._subjectKey);
+    const displayName = baseAfterName || baseBeforeName || rowName || subjectKey;
 
     const docInfo = {
       subjectKey: matchedKey,
