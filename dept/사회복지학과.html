@@ -574,6 +574,8 @@ function renderTable(){
     const changeList = info.changedFields || [];
     const tableAwareChanges = changeList.filter(f => tableFields.includes(f));
     const highlightAll = info.changed && tableAwareChanges.length === 0;
+    const inlineDiff = info.new || info.deleted;
+
 
     tableFields.forEach(f=>{
       let td=document.createElement("td");
@@ -585,7 +587,7 @@ function renderTable(){
 
       let rawValue = f === "교과목명" ? displayName : row.hasOwnProperty(f) ? row[f] : "";
 
-      if(hasChange && info.detail && info.detail[f]){
+      if(hasChange && info.detail && info.detail[f] && inlineDiff){
         const beforeRaw = info.detail[f].before;
         const afterRaw = info.detail[f].after;
         const before = displayValue(f, beforeRaw);

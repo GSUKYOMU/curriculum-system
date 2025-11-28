@@ -507,6 +507,8 @@ function renderTable(){
     const changeList = info.changedFields || [];
     const tableAwareChanges = changeList.filter(f => tableFields.includes(f));
     const highlightAll = info.changed && tableAwareChanges.length === 0;
+    const inlineDiff = info.new || info.deleted;
+
 
     tableFields.forEach(f=>{
       let td=document.createElement("td");
@@ -519,7 +521,7 @@ function renderTable(){
       let value = row[f] || "";
       if (f === "교과목명") value = displayName;
 
-      if(hasChange && info.detail && info.detail[f]){
+      if(hasChange && info.detail && info.detail[f] && inlineDiff){
         const before = info.detail[f].before ?? "";
         const after = info.detail[f].after ?? "";
         value = `${before || "-"} → ${after || "-"}`;
