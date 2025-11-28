@@ -13,6 +13,7 @@
   .row-deleted { background:#ffe5e5; color:#9b0000; text-decoration:line-through; }
   .row-changed { background:#fff7cc; }
   .cell-changed { background:#fff0b3; font-weight:600; }
+  .major-required { color:#b91c1c; font-weight:600; }
   .sort-icon { font-size:10px; margin-left:4px; }
   #overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
   #panel {
@@ -97,6 +98,7 @@
    공통 함수
 -------------------------- */
 const STORAGE_KEY = "curriculumData";
+const TABLE_FIELDS = ["개설학년","개설학기","이수구분","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
 const DEPT_OPTIONS = [
   { id: "사회복지학과", label: "사회복지학과" },
   { id: "보육과정", label: "보육과정" }
@@ -121,6 +123,7 @@ function clean(v){
     .replace(/\s+/g, " ")
     .trim();
 }
+function same(a,b){ return clean(a) === clean(b); }
 function changeKey(change){
   const type = clean(change?.type);
   const afterName = clean(change?.after?.name);
@@ -311,6 +314,7 @@ function loadYear(){
   }
 
   baseEntry = all[0];
+  const previousEntry = all[1] || null;
 
   const rows = Array.isArray(baseEntry.data) ? baseEntry.data : [];
   if (!rows.length) {
@@ -334,6 +338,10 @@ function loadYear(){
   defaultSort(finalData);
   updateYearInfo();
   updateGradeOptions();
+
+  const previousRows = Array.isArray(previousEntry?.data) ? previousEntry.data : null;
+  const diffMark = buildDiffMarks(finalData, previousRows);
+  finalData._mark = mergeMarks(finalData._mark || {}, diffMark);
 
   renderTable();
 }
@@ -457,6 +465,90 @@ function buildFinal(originalRows, changes){
   return data;
 }
 
+function mergeMarkInfo(base, extra){
+  if (!base) return { ...extra };
+  const merged = { ...base };
+  merged.new = base.new || extra.new;
+  merged.deleted = base.deleted || extra.deleted;
+  merged.changed = base.changed || extra.changed;
+  merged.displayName = merged.displayName || extra.displayName;
+  merged.reason = merged.reason || extra.reason;
+  merged.changeDocNum = merged.changeDocNum || extra.changeDocNum;
+  merged.changeDate = merged.changeDate || extra.changeDate;
+  merged.before = merged.before || extra.before;
+  merged.after = merged.after || extra.after;
+  merged.detail = { ...(base.detail || {}), ...(extra.detail || {}) };
+  merged.changedFields = Array.from(new Set([...(base.changedFields || []), ...(extra.changedFields || [])]));
+  merged.changes = [ ...(base.changes || []), ...(extra.changes || []) ];
+  merged.subjectKey = merged.subjectKey || extra.subjectKey;
+  return merged;
+}
+
+function mergeMarks(baseMark, extraMark){
+  const merged = { ...(baseMark || {}) };
+  Object.entries(extraMark || {}).forEach(([key, info]) => {
+    merged[key] = mergeMarkInfo(merged[key], info);
+  });
+  return merged;
+}
+
+function buildDiffMarks(currentRows, previousRows){
+  const mark = {};
+  if (!Array.isArray(currentRows)) return mark;
+
+  const prevMap = new Map();
+  (Array.isArray(previousRows) ? previousRows : []).forEach(row => {
+    const key = clean(row["교과목명"]);
+    if (key) prevMap.set(key, row);
+  });
+
+  currentRows.forEach(row => {
+    const key = clean(row._subjectKey || row["교과목명"]);
+    if (!key) return;
+    const prev = prevMap.get(key);
+    const detail = {};
+
+    if (prev) {
+      TABLE_FIELDS.forEach(label => {
+        const before = prev[label] ?? "";
+        const after = row[label] ?? "";
+        if (!same(before, after)) {
+          detail[label] = { before, after };
+        }
+      });
+
+      if (Object.keys(detail).length) {
+        mark[key] = {
+          subjectKey: key,
+          displayName: row["교과목명"],
+          changed: true,
+          detail,
+          changedFields: Object.keys(detail)
+        };
+      }
+    } else {
+      TABLE_FIELDS.forEach(label => {
+        const after = row[label] ?? "";
+        if (clean(after) !== "") {
+          detail[label] = { before: "", after };
+        }
+      });
+
+      if (Object.keys(detail).length) {
+        mark[key] = {
+          subjectKey: key,
+          displayName: row["교과목명"],
+          new: true,
+          detail,
+          changedFields: Object.keys(detail)
+        };
+      }
+    }
+  });
+
+  return mark;
+}
+
 /* --------------------------
    테이블 렌더링
 -------------------------- */
@@ -466,7 +558,7 @@ function renderTable(){
 
   const mark = finalData._mark || {};
 
-  const tableFields=["개설학년","개설학기","이수구분","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+  const tableFields = TABLE_FIELDS;
 
   finalData.forEach(row=>{
     const subjectKey = clean(row._subjectKey || row["교과목명"]);
@@ -501,6 +593,10 @@ function renderTable(){
       }
 
       const value = displayValue(f, rawValue);
+
+      if (f === "이수구분" && clean(value).includes("전공필수")) {
+        td.classList.add("major-required");
+      }
 
       if(f==="교과목명" && (info.new||info.deleted||info.changed)){
         td.innerHTML = `
