@@ -13,6 +13,7 @@
   .row-deleted { background:#ffe5e5; color:#9b0000; text-decoration:line-through; }
   .row-changed { background:#fff7cc; }
   .cell-changed { background:#fff0b3; font-weight:600; }
+  .major-required { color:#b91c1c; font-weight:600; }
   .sort-icon { font-size:10px; margin-left:4px; }
   #overlay { position:fixed; inset:0; background:rgba(0,0,0,0.3); display:none; }
   #panel {
@@ -97,6 +98,7 @@
    공통 함수
 -------------------------- */
 const STORAGE_KEY = "curriculumData";
+const TABLE_FIELDS = ["개설학년","개설학기","이수구분","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
 const DEPT_OPTIONS = [
   { id: "사회복지학과", label: "사회복지학과" },
   { id: "보육과정", label: "보육과정" }
@@ -121,6 +123,7 @@ function clean(v){
     .replace(/\s+/g, " ")
     .trim();
 }
+function same(a,b){ return clean(a) === clean(b); }
 function changeKey(change){
   const type = clean(change?.type);
   const afterName = clean(change?.after?.name);
@@ -311,6 +314,7 @@ function loadYear(){
   }
 
   baseEntry = all[0];
+  const previousEntry = all[1] || null;
 
   const rows = Array.isArray(baseEntry.data) ? baseEntry.data : [];
   if (!rows.length) {
@@ -334,6 +338,10 @@ function loadYear(){
   defaultSort(finalData);
   updateYearInfo();
   updateGradeOptions();
+
+  const previousRows = Array.isArray(previousEntry?.data) ? previousEntry.data : null;
+  const diffMark = buildDiffMarks(finalData, previousRows);
+  finalData._mark = mergeMarks(finalData._mark || {}, diffMark);
 
   renderTable();
 }
@@ -457,6 +465,91 @@ function buildFinal(originalRows, changes){
   return data;
 }
 
+function mergeMarkInfo(base, extra){
+  if (!base) return { ...extra };
+  const merged = { ...base };
+  merged.new = base.new || extra.new;
+  merged.deleted = base.deleted || extra.deleted;
+  merged.changed = base.changed || extra.changed;
+  merged.displayName = merged.displayName || extra.displayName;
+  merged.reason = merged.reason || extra.reason;
+  merged.changeDocNum = merged.changeDocNum || extra.changeDocNum;
+  merged.changeDate = merged.changeDate || extra.changeDate;
+  merged.before = merged.before || extra.before;
+  merged.after = merged.after || extra.after;
+  merged.detail = { ...(base.detail || {}), ...(extra.detail || {}) };
+  merged.changedFields = Array.from(new Set([...(base.changedFields || []), ...(extra.changedFields || [])]));
+  merged.changes = [ ...(base.changes || []), ...(extra.changes || []) ];
+  merged.subjectKey = merged.subjectKey || extra.subjectKey;
+  return merged;
+}
+
+function mergeMarks(baseMark, extraMark){
+  const merged = { ...(baseMark || {}) };
+  Object.entries(extraMark || {}).forEach(([key, info]) => {
+    merged[key] = mergeMarkInfo(merged[key], info);
+  });
+  return merged;
+}
+
+function buildDiffMarks(currentRows, previousRows){
+  const mark = {};
+  if (!Array.isArray(currentRows)) return mark;
+  if (!Array.isArray(previousRows) || previousRows.length === 0) return mark;
+
+  const prevMap = new Map();
+  (Array.isArray(previousRows) ? previousRows : []).forEach(row => {
+    const key = clean(row["교과목명"]);
+    if (key) prevMap.set(key, row);
+  });
+
+  currentRows.forEach(row => {
+    const key = clean(row._subjectKey || row["교과목명"]);
+    if (!key) return;
+    const prev = prevMap.get(key);
+    const detail = {};
+
+    if (prev) {
+      TABLE_FIELDS.forEach(label => {
+        const before = prev[label] ?? "";
+        const after = row[label] ?? "";
+        if (!same(before, after)) {
+          detail[label] = { before, after };
+        }
+      });
+
+      if (Object.keys(detail).length) {
+        mark[key] = {
+          subjectKey: key,
+          displayName: row["교과목명"],
+          changed: true,
+          detail,
+          changedFields: Object.keys(detail)
+        };
+      }
+    } else {
+      TABLE_FIELDS.forEach(label => {
+        const after = row[label] ?? "";
+        if (clean(after) !== "") {
+          detail[label] = { before: "", after };
+        }
+      });
+
+      if (Object.keys(detail).length) {
+        mark[key] = {
+          subjectKey: key,
+          displayName: row["교과목명"],
+          new: true,
+          detail,
+          changedFields: Object.keys(detail)
+        };
+      }
+    }
+  });
+
+  return mark;
+}
+
 /* --------------------------
    테이블 렌더링
 -------------------------- */
@@ -466,7 +559,7 @@ function renderTable(){
 
   const mark = finalData._mark || {};
 
-  const tableFields=["개설학년","개설학기","이수구분","교과목명","학점","총시수","이론시수","실습시수","실험시수","실기시수"];
+  const tableFields = TABLE_FIELDS;
 
   finalData.forEach(row=>{
     const subjectKey = clean(row._subjectKey || row["교과목명"]);
@@ -481,6 +574,8 @@ function renderTable(){
     const changeList = info.changedFields || [];
     const tableAwareChanges = changeList.filter(f => tableFields.includes(f));
     const highlightAll = info.changed && tableAwareChanges.length === 0;
+    const inlineDiff = info.new || info.deleted;
+
 
     tableFields.forEach(f=>{
       let td=document.createElement("td");
@@ -492,7 +587,7 @@ function renderTable(){
 
       let rawValue = f === "교과목명" ? displayName : row.hasOwnProperty(f) ? row[f] : "";
 
-      if(hasChange && info.detail && info.detail[f]){
+      if(hasChange && info.detail && info.detail[f] && inlineDiff){
         const beforeRaw = info.detail[f].before;
         const afterRaw = info.detail[f].after;
         const before = displayValue(f, beforeRaw);
@@ -501,6 +596,10 @@ function renderTable(){
       }
 
       const value = displayValue(f, rawValue);
+
+      if (f === "이수구분" && clean(value).includes("전공필수")) {
+        td.classList.add("major-required");
+      }
 
       if(f==="교과목명" && (info.new||info.deleted||info.changed)){
         td.innerHTML = `
@@ -635,21 +734,41 @@ function downloadExcel(){
 /* --------------------------
    변경 상세 패널
 -------------------------- */
-function openPanel(subjectKey, displayName){
-  const changes = baseEntry._normalizedChanges || [];
-  const list = changes.filter(ch=>ch.subject===clean(subjectKey));
 
+function openPanel(subjectKey, displayName){
+  const key = clean(subjectKey);
+  const mark = finalData._mark || {};
+  const info = key ? (mark[key] || {}) : {};
+  const normalizedChanges = baseEntry?._normalizedChanges || [];
+  const changesFromBase = key ? normalizedChanges.filter(ch => clean(ch.subject) === key) : [];
+  const changesFromMark = Array.isArray(info.changes) ? info.changes.filter(Boolean) : [];
+  const list = (changesFromMark.length ? changesFromMark : changesFromBase).map(ch => ({ ...ch }));
+  const fallbackType = info.new ? "신규" : info.deleted ? "폐지" : info.changed ? "변경" : "";
+
+  if (!list.length && info.detail) {
+    list.push({
+      subject: key,
+      type: fallbackType,
+      reason: info.reason,
+      changeDocNum: info.changeDocNum,
+      changeDate: info.changeDate,
+      detail: info.detail
+    });
+  }
+
+  const title = displayName || info.displayName || key || "과목";
   const box=document.getElementById("panelContent");
-  box.innerHTML = `<h3 class=\"font-bold text-lg mb-2\">${displayName || subjectKey}</h3>`;
+  box.innerHTML = `<h3 class="font-bold text-lg mb-2">${title}</h3>`;
 
   if (!list.length) {
-    box.innerHTML += `<p class=\"text-sm text-gray-500\">변경 내역을 찾을 수 없습니다.</p>`;
+    box.innerHTML += `<p class="text-sm text-gray-500">변경 내역을 찾을 수 없습니다.</p>`;
   }
 
   list.forEach(ch=>{
+    const detail = ch.detail || {};
     box.innerHTML += `
       <div class="mb-4 border-b pb-2">
-        <p><b>유형:</b> ${ch.type}</p>
+        <p><b>유형:</b> ${ch.type || fallbackType || "-"}</p>
         <p><b>사유:</b> ${ch.reason||"-"}</p>
         <p><b>문서번호:</b> ${ch.changeDocNum||"-"}</p>
         <p><b>회의일:</b> ${ch.changeDate||"-"}</p>
@@ -660,10 +779,10 @@ function openPanel(subjectKey, displayName){
             <th class="border px-1 py-0.5">변경 후</th>
           </tr>
     `;
-    if(ch.detail && Object.keys(ch.detail).length){
-      Object.keys(ch.detail).forEach(k=>{
-        const before = displayValue(k, ch.detail[k].before);
-        const after = displayValue(k, ch.detail[k].after);
+    if(detail && Object.keys(detail).length){
+      Object.keys(detail).forEach(k=>{
+        const before = displayValue(k, detail[k].before);
+        const after = displayValue(k, detail[k].after);
         box.innerHTML += `
           <tr>
             <td class="border px-1 py-0.5">${k}</td>
@@ -687,6 +806,7 @@ function openPanel(subjectKey, displayName){
 }
 
 function closePanel(){
+
   document.getElementById("overlay").style.display="none";
   document.getElementById("panel").style.transform="translateX(100%)";
 }
